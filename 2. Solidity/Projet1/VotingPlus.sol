@@ -53,13 +53,6 @@ contract Voting is Ownable {
 
     constructor() Ownable(msg.sender) {
         workflowStatus = WorkflowStatus.RegisteringVoters;
-
-        // // if the admin is not added, it's adding him as a voter by default
-        // if (!voters[owner()].isRegistered) {
-        //     voters[owner()] = Voter({isRegistered: true, hasVoted: false, votedProposalId: 0});
-        //     registeredVotersCount += 1;
-        //     emit VoterRegistered(owner());
-        // }
     }
 
     /** Admin functions (owner) **/
