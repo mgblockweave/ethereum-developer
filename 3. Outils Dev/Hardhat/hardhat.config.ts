@@ -2,9 +2,16 @@ import type { HardhatUserConfig } from "hardhat/config";
 
 import hardhatToolboxMochaEthersPlugin from "@nomicfoundation/hardhat-toolbox-mocha-ethers";
 import { configVariable } from "hardhat/config";
+import hardhatKeystore from "@nomicfoundation/hardhat-keystore";
+import hardhatVerify from "@nomicfoundation/hardhat-verify";
 
 const config: HardhatUserConfig = {
-  plugins: [hardhatToolboxMochaEthersPlugin],
+  plugins: [hardhatToolboxMochaEthersPlugin,hardhatKeystore,hardhatVerify],
+  verify: {
+    etherscan: {
+      apiKey: "52E6JEIB9IMN9F36XSNWK54QVXNWZYAZFM",
+    },
+  },
   solidity: {
     profiles: {
       default: {

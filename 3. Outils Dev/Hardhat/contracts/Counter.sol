@@ -7,6 +7,7 @@ contract Counter {
   event Increment(uint by);
 
   function inc() public {
+    require(x < 2, "pas trop haut");
     x++;
     emit Increment(1);
   }
