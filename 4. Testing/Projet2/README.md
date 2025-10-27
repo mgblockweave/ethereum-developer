@@ -29,3 +29,31 @@ Stucture
 npm i
 npx hardhat compile
 npx hardhat test
+
+---
+
+Results :
+Projet2 % npx hardhat test
+Nothing to compile
+Nothing to compile
+
+Running Solidity tests
+
+
+
+  0 passing
+
+Running Mocha tests
+
+
+  Voting tests
+    ✔ start owner = deployer & status = RegisteringVoters
+    ✔ addVoter onlyOwner + event + no double registrations
+    ✔ getters onlyVoters
+    ✔ startProposals add new GENESIS + empty blocked + event ProposalRegistered
+    ✔ vote proposal not found + no double voted + event
+    ✔ tallyVotes expect winner
+    ✔ setVote session not started
+
+
+  7 passing (136ms)
