@@ -1,6 +1,0 @@
-{
-  "dependencies": {
-    "ethers": "^6.16.0",
-    "viem": "^2.41.2"
-  }
-}

@@ -203,9 +203,11 @@ export const PatriDefiAdmin = () => {
       return;
     }
 
-    // Build JSON payload for Supabase
+    const normalizedWallet = form.walletAddress.toLowerCase();
+
+    // Build JSON payload for Supabase (wallet stocké en minuscule)
     const offchainPayload = {
-      customer: form,
+      customer: { ...form, walletAddress: normalizedWallet },
       napoleons,
     };
 
@@ -240,13 +242,22 @@ export const PatriDefiAdmin = () => {
     const totalAmount = napoleons.reduce((acc, n) => acc + n.quantity, 0);
 
     // Call smart contract
+    const targetContract = CONTRACT_ADDRESS as `0x${string}`;
+    if (!targetContract || targetContract === "0x0000000000000000000000000000000000000000") {
+      setError("Adresse du contrat PatriDeFi non configurée (NEXT_PUBLIC_PATRI_DEFI_ADDRESS).");
+      return;
+    }
+
+    // Les NFTs doivent être détenus par l'admin (custodie)
+    const recipient = ADMIN_ADDRESS as `0x${string}`;
+
     try {
       writeContract({
         abi: CONTRACT_ABI,
-        address: CONTRACT_ADDRESS as `0x${string}`,
+        address: targetContract,
         functionName: "registerCustomerAndMint",
         args: [
-          form.walletAddress as `0x${string}`,
+          recipient,
           supabaseIdBytes32,
           dataHash,
           BigInt(totalAmount),
