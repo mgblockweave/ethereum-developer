@@ -291,9 +291,6 @@ export const PatriDefiAdmin = () => {
           <h1 className="text-2xl font-semibold">
             Administration PatriDeFi
           </h1>
-          <p className="text-sm text-muted-foreground">
-            Encodage et vue globale des clients et napoléons.
-          </p>
         </div>
 
         <div className="inline-flex gap-1 rounded-lg border bg-muted/30 p-1">
@@ -303,7 +300,7 @@ export const PatriDefiAdmin = () => {
             size="sm"
             onClick={() => setActiveTab("encode")}
           >
-            Encodage
+            Ajouter un client
           </Button>
           <Button
             type="button"
@@ -311,7 +308,7 @@ export const PatriDefiAdmin = () => {
             size="sm"
             onClick={() => setActiveTab("dashboard")}
           >
-            Tableau clients
+            Vue des clients
           </Button>
         </div>
       </div>
@@ -320,11 +317,11 @@ export const PatriDefiAdmin = () => {
         <>
           <div className="space-y-1">
             <h2 className="text-lg font-semibold">
-              Encodage client
+              Ajout des informations client et tokenisation des Napoléons d'or
             </h2>
 
             <p className="text-sm text-muted-foreground">
-              Saisissez les informations du client ainsi que les pièces d’or.
+              Renseignez le client et ses Napoléons d’or, puis déclenchez la tokenisation.
             </p>
 
             {connectedAddress && (
@@ -387,7 +384,7 @@ export const PatriDefiAdmin = () => {
               <div className="flex justify-between">
                 <h3 className="text-lg font-medium">Napoléons d’or</h3>
                 <Button type="button" variant="outline" size="sm" onClick={handleAddNapoleon}>
-                  Ajouter une ligne
+                  Ajouter un lot de pièces
                 </Button>
               </div>
 
@@ -486,6 +483,9 @@ export const PatriDefiAdmin = () => {
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-lg font-medium">Clients enregistrés</h2>
+              <p className="text-xs text-muted-foreground">
+                Vue synthétique : identité, adresse postale, wallet et détail des pièces.
+              </p>
             </div>
             <Button size="sm" variant="outline" onClick={fetchCustomers} disabled={listLoading}>
               {listLoading ? "Rafraîchissement..." : "Rafraîchir"}
@@ -508,42 +508,49 @@ export const PatriDefiAdmin = () => {
                 const napos = c.payload?.napoleons || [];
                 const totalCoins = napos.reduce((acc, n) => acc + (n.quantity || 0), 0);
                 return (
-                  <div
-                    key={c.id}
+                <div
+                  key={c.id}
                     className="rounded-lg border bg-background p-3 space-y-2"
                   >
                     <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
                       <div className="space-y-0.5">
                         <p className="font-semibold">
-                          {c.firstname} {c.lastname} — {c.wallet}
+                          {c.firstname} {c.lastname}
                         </p>
                         <p className="text-xs text-muted-foreground break-words">
-                          {c.homeaddress}
+                          Wallet : {c.wallet}
+                        </p>
+                        <p className="text-xs text-muted-foreground break-words">
+                          Adresse postale : {c.homeaddress}
                         </p>
                       </div>
-                      <div className="text-xs text-muted-foreground">
-                        {napos.length} ligne(s) · {totalCoins} pièce(s)
+                      <div className="text-xs text-muted-foreground text-right">
+                        <div>{napos.length} lot(s)</div>
+                        <div>{totalCoins} pièce(s) au total</div>
                       </div>
                     </div>
 
-                    {napos.length > 0 && (
-                      <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
-                        {napos.map((n, idx) => (
+                        {napos.length > 0 && (
+                          <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+                            {napos.map((n, idx) => (
                           <div
                             key={`${c.id}-${idx}`}
                             className="rounded-md border bg-muted/50 p-2 text-sm"
                           >
-                            <div className="flex justify-between">
-                              <span className="text-xs text-muted-foreground"># {idx + 1}</span>
-                              <span className="text-xs">{n.quality}</span>
+                            <div className="flex justify-between text-xs text-muted-foreground">
+                              <span>Lot #{idx + 1}</span>
+                              <span>Qualité&nbsp;: {n.quality || "N/A"}</span>
                             </div>
-                            <div className="mt-1 font-medium">
-                              {n.quantity} pcs · {n.weight} g
+                            <div className="mt-1 text-xs text-muted-foreground">
+                              Quantité&nbsp;: {n.quantity} unité(s)
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              Poids unitaire&nbsp;: {n.weight} g
                             </div>
                           </div>
                         ))}
-                      </div>
-                    )}
+                          </div>
+                        )}
                   </div>
                 );
               })}
