@@ -59,6 +59,8 @@ export const PatriDefiAdmin = () => {
   const [napoleons, setNapoleons] = useState<Napoleon[]>([
     { quantity: 1, weight: 6.45, quality: "" },
   ]);
+  // Qualités usuelles pour les Napoléons : TB (Très Bon), TTB (Très Très Beau), SUP (Superbe), SPL (Splendide), FDC (Fleur de Coin)
+  const qualityOptions = ["TB", "TTB", "SUP", "SPL", "FDC"];
 
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -291,6 +293,9 @@ export const PatriDefiAdmin = () => {
           <h1 className="text-2xl font-semibold">
             Administration PatriDeFi
           </h1>
+          <p className="text-sm text-muted-foreground">
+            Saisissez les clients, déclarez leurs Napoléons et suivez les NFT de garantie.
+          </p>
         </div>
 
         <div className="inline-flex gap-1 rounded-lg border bg-muted/30 p-1">
@@ -312,18 +317,16 @@ export const PatriDefiAdmin = () => {
           </Button>
         </div>
       </div>
-
+            <div className="h-px w-full bg-border" />
       {activeTab === "encode" && (
         <>
-          <div className="space-y-1">
+          <div className="space-y-2">
             <h2 className="text-lg font-semibold">
               Ajout des informations client et tokenisation des Napoléons d'or
             </h2>
-
             <p className="text-sm text-muted-foreground">
               Renseignez le client et ses Napoléons d’or, puis déclenchez la tokenisation.
             </p>
-
             {connectedAddress && (
               <p className="text-xs text-muted-foreground">
                 Connecté en tant que :{" "}
@@ -416,16 +419,33 @@ export const PatriDefiAdmin = () => {
                     />
                   </div>
 
-                  <div className="space-y-1">
-                    <Label>Qualité</Label>
-                    <Input
-                      placeholder="TTB, SUP, FDC…"
-                      value={nap.quality}
-                      onChange={(e) =>
-                        handleNapoleonChange(index, "quality", e.target.value)
-                      }
-                    />
-                  </div>
+                <div className="space-y-1">
+                  <Label>Qualité</Label>
+                  <select
+                    className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    value={nap.quality}
+                    onChange={(e) =>
+                      handleNapoleonChange(index, "quality", e.target.value)
+                    }
+                  >
+                    <option value="">Sélectionner</option>
+                    {qualityOptions.map((q) => (
+                      <option key={q} value={q}>
+                        {q} (
+                        {q === "TB"
+                          ? "Très Bon"
+                          : q === "TTB"
+                          ? "Très Très Beau"
+                          : q === "SUP"
+                          ? "Superbe"
+                          : q === "SPL"
+                          ? "Splendide"
+                          : "Fleur de Coin"}
+                        )
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
                   <div className="flex items-end">
                     <Button
