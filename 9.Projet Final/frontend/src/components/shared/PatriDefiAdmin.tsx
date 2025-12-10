@@ -107,7 +107,7 @@ export const PatriDefiAdmin = () => {
   // Reset UI after on-chain confirmation
   useEffect(() => {
     if (isConfirmed) {
-      setSuccess("Client enregistré et NFT minté avec succès ✅");
+      setSuccess("Client enregistré et NFT minté avec succès");
 
       setForm({
         firstName: "",
