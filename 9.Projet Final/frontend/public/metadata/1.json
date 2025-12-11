@@ -1,0 +1,8 @@
+{
+  "name": "PatriDeFi Gold #1",
+  "description": "Napoléon tokenisé",
+  "image": "http://localhost:3000/images/napoleon.png",
+  "attributes": [
+    { "trait_type": "Asset", "value": "Napoléon" }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "name": "ponder",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "ponder dev",
+    "start": "ponder start",
+    "build": "ponder codegen"
+  },
+  "devDependencies": {
+    "@ponder/core": "^0.6.2",
+    "@types/node": "^20.10.0"
+  }
+}

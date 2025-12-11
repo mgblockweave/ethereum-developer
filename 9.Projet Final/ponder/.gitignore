@@ -1,0 +1,6 @@
+node_modules
+.generated
+.ponder
+sqlite
+*.log
+ponder-env.d.ts

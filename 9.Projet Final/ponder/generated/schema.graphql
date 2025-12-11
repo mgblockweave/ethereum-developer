@@ -1,0 +1,146 @@
+type Query {
+  customers(id: String!): customers
+  customerss(where: customersFilter, orderBy: String, orderDirection: String, before: String, after: String, limit: Int): customersPage!
+  tokens(id: String!): tokens
+  tokenss(where: tokensFilter, orderBy: String, orderDirection: String, before: String, after: String, limit: Int): tokensPage!
+  _meta: _meta
+}
+
+type customers {
+  id: String!
+  supabaseId: String!
+  dataHash: String!
+}
+
+type customersPage {
+  items: [customers!]!
+  pageInfo: PageInfo!
+}
+
+type PageInfo {
+  hasNextPage: Boolean!
+  hasPreviousPage: Boolean!
+  startCursor: String
+  endCursor: String
+}
+
+input customersFilter {
+  AND: [customersFilter]
+  OR: [customersFilter]
+  id: String
+  id_not: String
+  id_in: [String]
+  id_not_in: [String]
+  id_contains: String
+  id_not_contains: String
+  id_starts_with: String
+  id_ends_with: String
+  id_not_starts_with: String
+  id_not_ends_with: String
+  supabaseId: String
+  supabaseId_not: String
+  supabaseId_in: [String]
+  supabaseId_not_in: [String]
+  supabaseId_contains: String
+  supabaseId_not_contains: String
+  supabaseId_starts_with: String
+  supabaseId_ends_with: String
+  supabaseId_not_starts_with: String
+  supabaseId_not_ends_with: String
+  dataHash: String
+  dataHash_not: String
+  dataHash_in: [String]
+  dataHash_not_in: [String]
+  dataHash_contains: String
+  dataHash_not_contains: String
+  dataHash_starts_with: String
+  dataHash_ends_with: String
+  dataHash_not_starts_with: String
+  dataHash_not_ends_with: String
+}
+
+type tokens {
+  id: String!
+  to: String!
+  supabaseId: String!
+  goldPrice: String!
+  quality: Int!
+  pieceValue: String!
+}
+
+type tokensPage {
+  items: [tokens!]!
+  pageInfo: PageInfo!
+}
+
+input tokensFilter {
+  AND: [tokensFilter]
+  OR: [tokensFilter]
+  id: String
+  id_not: String
+  id_in: [String]
+  id_not_in: [String]
+  id_contains: String
+  id_not_contains: String
+  id_starts_with: String
+  id_ends_with: String
+  id_not_starts_with: String
+  id_not_ends_with: String
+  to: String
+  to_not: String
+  to_in: [String]
+  to_not_in: [String]
+  to_contains: String
+  to_not_contains: String
+  to_starts_with: String
+  to_ends_with: String
+  to_not_starts_with: String
+  to_not_ends_with: String
+  supabaseId: String
+  supabaseId_not: String
+  supabaseId_in: [String]
+  supabaseId_not_in: [String]
+  supabaseId_contains: String
+  supabaseId_not_contains: String
+  supabaseId_starts_with: String
+  supabaseId_ends_with: String
+  supabaseId_not_starts_with: String
+  supabaseId_not_ends_with: String
+  goldPrice: String
+  goldPrice_not: String
+  goldPrice_in: [String]
+  goldPrice_not_in: [String]
+  goldPrice_contains: String
+  goldPrice_not_contains: String
+  goldPrice_starts_with: String
+  goldPrice_ends_with: String
+  goldPrice_not_starts_with: String
+  goldPrice_not_ends_with: String
+  quality: Int
+  quality_not: Int
+  quality_in: [Int]
+  quality_not_in: [Int]
+  quality_gt: Int
+  quality_lt: Int
+  quality_gte: Int
+  quality_lte: Int
+  pieceValue: String
+  pieceValue_not: String
+  pieceValue_in: [String]
+  pieceValue_not_in: [String]
+  pieceValue_contains: String
+  pieceValue_not_contains: String
+  pieceValue_starts_with: String
+  pieceValue_ends_with: String
+  pieceValue_not_starts_with: String
+  pieceValue_not_ends_with: String
+}
+
+type _meta {
+  status: JSON
+}
+
+"""
+The `JSON` scalar type represents JSON values as specified by [ECMA-404](http://www.ecma-international.org/publications/files/ECMA-ST/ECMA-404.pdf).
+"""
+scalar JSON

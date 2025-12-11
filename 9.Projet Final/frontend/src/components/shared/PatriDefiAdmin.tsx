@@ -47,7 +47,9 @@ type CustomerRow = {
 export const PatriDefiAdmin = () => {
   const { address: connectedAddress, isConnected } = useAccount();
 
-  const [activeTab, setActiveTab] = useState<"encode" | "dashboard">("encode");
+  const [activeTab, setActiveTab] = useState<
+    "encode" | "dashboard" | "search"
+  >("encode");
 
   const [form, setForm] = useState<CustomerForm>({
     firstName: "",
@@ -67,6 +69,69 @@ export const PatriDefiAdmin = () => {
   const [customers, setCustomers] = useState<CustomerRow[]>([]);
   const [listError, setListError] = useState<string | null>(null);
   const [listLoading, setListLoading] = useState(false);
+
+  // Token lookup (by tokenId or supabaseId)
+  const [searchInput, setSearchInput] = useState("");
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [searchResult, setSearchResult] = useState<{
+    tokenId: string;
+    name?: string;
+    image?: string;
+    goldPrice?: string;
+    quality?: string;
+    pieceValue?: string;
+    amount?: string;
+    uri?: string;
+  } | null>(null);
+
+  // Utils
+  const formatUsd = (raw?: string) => {
+    if (!raw) return null;
+    const n = Number(raw);
+    if (Number.isNaN(n)) return raw;
+    const usd = n / 1e8; // feed and pieceValue are en 1e8
+    return `$${usd.toLocaleString("en-US", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
+  };
+
+  const qualityBpsMap: Record<string, number> = {
+    TB: 8000,
+    TTB: 9000,
+    SUP: 9500,
+    SPL: 9750,
+    FDC: 10000,
+  };
+
+  const formatWeight = (
+    pieceValue?: string,
+    goldPrice?: string,
+    quality?: string,
+  ) => {
+    if (!pieceValue || !goldPrice || !quality) return null;
+    const bps = qualityBpsMap[quality] ?? null;
+    if (!bps) return null;
+    try {
+      const pv = BigInt(pieceValue);
+      const gp = BigInt(goldPrice);
+      if (pv === BigInt(0) || gp === BigInt(0)) return null;
+      // weightMg = pieceValue * 10000 * MG_PER_OUNCE / (goldPrice * bps)
+      const MG_PER_OUNCE = BigInt(31103); // mg dans une once troy
+      const numer = pv * BigInt(10000) * MG_PER_OUNCE;
+      const denom = gp * BigInt(bps);
+      if (denom === BigInt(0)) return null;
+      const weightMg = numer / denom;
+      const grams = Number(weightMg) / 1000;
+      return `${grams.toLocaleString("fr-FR", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })} g`;
+    } catch {
+      return null;
+    }
+  };
 
   // Check admin
   const isAdmin =
@@ -166,6 +231,54 @@ export const PatriDefiAdmin = () => {
   };
 
   // --------------------------
+  // TOKEN LOOKUP
+  // --------------------------
+  const handleSearch = async () => {
+    setSearchError(null);
+    setSearchResult(null);
+    const value = searchInput.trim();
+    if (!value) {
+      setSearchError("Champ de recherche vide.");
+      return;
+    }
+
+    setSearchLoading(true);
+    try {
+      if (!/^\d+$/.test(value)) {
+        throw new Error("En mode tokenId, renseigne un nombre (ex: 1).");
+      }
+      const res = await fetch(`/api/metadata/${value}`);
+      if (!res.ok) throw new Error("Impossible de récupérer la métadonnée");
+      const meta = await res.json();
+
+      const attrMap: Record<string, string> = {};
+      if (Array.isArray(meta.attributes)) {
+        for (const a of meta.attributes) {
+          if (a?.trait_type && a?.value !== undefined) {
+            attrMap[a.trait_type] = String(a.value);
+          }
+        }
+      }
+
+      setSearchResult({
+        tokenId: value,
+        name: meta.name,
+        image: meta.image,
+        goldPrice: attrMap["Gold Price (feed)"],
+        quality: attrMap["Quality"],
+        pieceValue: attrMap["Piece Value"],
+        amount: attrMap["Amount"],
+        uri: meta.external_url || undefined,
+      });
+    } catch (err: any) {
+      setSearchError(err.message || "Erreur lors de la recherche.");
+    } finally {
+      setSearchLoading(false);
+    }
+  };
+
+
+  // --------------------------
   // MAIN FORM SUBMISSION FLOW
   // --------------------------
 
@@ -240,8 +353,31 @@ export const PatriDefiAdmin = () => {
     const supabaseIdBytes32 = keccak256(stringToBytes(supabaseUUID));
     const dataHash = keccak256(stringToBytes(JSON.stringify(offchainPayload)));
 
-    // Compute total gold amount
-    const totalAmount = napoleons.reduce((acc, n) => acc + n.quantity, 0);
+    // Construire les tableaux attendus par registerCustomerAndMintDetailed
+    // weights en milligrammes, qualities en uint8 (0..4)
+    const qualityMap: Record<string, number> = {
+      TB: 0,
+      TTB: 1,
+      SUP: 2,
+      SPL: 3,
+      FDC: 4,
+    };
+
+    const weightsMg: bigint[] = [];
+    const qualitiesArr: number[] = [];
+    for (const n of napoleons) {
+      const q = qualityMap[n.quality] ?? 0; // défaut: TB
+      const wMg = BigInt(Math.round((n.weight || 0) * 1000)); // grammes -> mg
+      for (let i = 0; i < (n.quantity || 0); i++) {
+        weightsMg.push(wMg);
+        qualitiesArr.push(q);
+      }
+    }
+
+    if (weightsMg.length === 0 || qualitiesArr.length === 0) {
+      setError("Aucune pièce saisie (quantités/poids/qualité).");
+      return;
+    }
 
     // Call smart contract
     const targetContract = CONTRACT_ADDRESS as `0x${string}`;
@@ -257,12 +393,13 @@ export const PatriDefiAdmin = () => {
       writeContract({
         abi: CONTRACT_ABI,
         address: targetContract,
-        functionName: "registerCustomerAndMint",
+        functionName: "registerCustomerAndMintDetailed",
         args: [
           recipient,
           supabaseIdBytes32,
           dataHash,
-          BigInt(totalAmount),
+          weightsMg,
+          qualitiesArr,
         ],
       });
     } catch (err: any) {
@@ -286,16 +423,14 @@ export const PatriDefiAdmin = () => {
   // --------------------------
 
   return (
-    <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 rounded-2xl border p-5 shadow-sm bg-transparent">
+    <div className="absolute left-1/2 top-16 -translate-x-1/2 flex w-full max-w-3xl flex-col gap-4 rounded-2xl border border-neutral-800 bg-neutral-900/80 p-5 shadow-xl backdrop-blur md:top-20">
 
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="space-y-1">
           <h1 className="text-2xl font-semibold">
             Administration PatriDeFi
           </h1>
-          <p className="text-sm text-muted-foreground">
-            Saisissez les clients, déclarez leurs Napoléons et suivez les NFT de garantie.
-          </p>
+
         </div>
 
         <div className="inline-flex gap-1 rounded-lg border bg-muted/30 p-1">
@@ -315,6 +450,14 @@ export const PatriDefiAdmin = () => {
           >
             Vue des clients
           </Button>
+          <Button
+            type="button"
+            variant={activeTab === "search" ? "default" : "ghost"}
+            size="sm"
+            onClick={() => setActiveTab("search")}
+          >
+            Recherche token
+          </Button>
         </div>
       </div>
             <div className="h-px w-full bg-border" />
@@ -325,7 +468,7 @@ export const PatriDefiAdmin = () => {
               Ajout des informations client et tokenisation des Napoléons d'or
             </h2>
             <p className="text-sm text-muted-foreground">
-              Renseignez le client et ses Napoléons d’or, puis déclenchez la tokenisation.
+              Renseignez les informations sur le client et ses Napoléons d’or, puis déclenchez la tokenisation.
             </p>
             {connectedAddress && (
               <p className="text-xs text-muted-foreground">
@@ -339,7 +482,7 @@ export const PatriDefiAdmin = () => {
           <form onSubmit={handleSubmit} className="space-y-6">
 
             {/* CLIENT INFO */}
-            <div className="space-y-4 rounded-xl border bg-muted/30 p-4">
+            <div className="space-y-4 rounded-xl border border-neutral-800 bg-neutral-900/80 p-4">
               <h3 className="text-lg font-medium">Informations client</h3>
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -382,7 +525,7 @@ export const PatriDefiAdmin = () => {
             </div>
 
             {/* GOLD TABLE */}
-            <div className="space-y-4 rounded-xl border bg-muted/30 p-4">
+            <div className="space-y-4 rounded-xl border border-neutral-800 bg-neutral-900/70 p-4">
 
               <div className="flex justify-between">
                 <h3 className="text-lg font-medium">Napoléons d’or</h3>
@@ -394,7 +537,7 @@ export const PatriDefiAdmin = () => {
               {napoleons.map((nap, index) => (
                 <div
                   key={index}
-                  className="grid grid-cols-1 gap-3 rounded-lg border bg-background p-3 md:grid-cols-[1fr,1fr,2fr,auto]"
+                  className="grid grid-cols-1 gap-3 rounded-lg border border-neutral-800 bg-neutral-900/60 p-3 md:grid-cols-[1fr,1fr,2fr,auto]"
                 >
                   <div className="space-y-1">
                     <Label>Quantité</Label>
@@ -421,13 +564,13 @@ export const PatriDefiAdmin = () => {
 
                 <div className="space-y-1">
                   <Label>Qualité</Label>
-                  <select
-                    className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    value={nap.quality}
-                    onChange={(e) =>
-                      handleNapoleonChange(index, "quality", e.target.value)
-                    }
-                  >
+                <select
+                  className="h-10 w-full rounded-md border border-neutral-700 bg-neutral-900/60 px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  value={nap.quality}
+                  onChange={(e) =>
+                    handleNapoleonChange(index, "quality", e.target.value)
+                  }
+                >
                     <option value="">Sélectionner</option>
                     {qualityOptions.map((q) => (
                       <option key={q} value={q}>
@@ -499,7 +642,7 @@ export const PatriDefiAdmin = () => {
       )}
 
       {activeTab === "dashboard" && (
-        <div className="space-y-3 rounded-xl border bg-muted/30 p-4">
+            <div className="space-y-3 rounded-xl border border-neutral-800 bg-neutral-900/80 p-4">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-lg font-medium">Clients enregistrés</h2>
@@ -530,7 +673,7 @@ export const PatriDefiAdmin = () => {
                 return (
                 <div
                   key={c.id}
-                    className="rounded-lg border bg-background p-3 space-y-2"
+                    className="rounded-lg border border-neutral-800 bg-neutral-900/60 p-3 space-y-2"
                   >
                     <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
                       <div className="space-y-0.5">
@@ -576,6 +719,95 @@ export const PatriDefiAdmin = () => {
               })}
             </div>
           )}
+        </div>
+      )}
+
+      {activeTab === "search" && (
+        <div className="space-y-4 rounded-xl border border-neutral-800 bg-neutral-900/60 p-4">
+      <div className="space-y-1">
+        <h2 className="text-lg font-medium">Recherche de token</h2>
+        <p className="text-xs text-muted-foreground">
+          Rechercher un NFT par tokenId.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-[200px,1fr,auto]">
+        <div className="space-y-1">
+          <Label>Token ID</Label>
+          <Input
+            placeholder="Ex: 1"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+          />
+        </div>
+
+        <div className="flex items-end">
+          <Button type="button" onClick={handleSearch} disabled={searchLoading}>
+            {searchLoading ? "Recherche..." : "Chercher"}
+          </Button>
+        </div>
+      </div>
+
+          {searchError && (
+            <Alert variant="destructive">
+              <AlertDescription>{searchError}</AlertDescription>
+            </Alert>
+          )}
+
+          {searchResult && (
+            <div className="rounded-lg border border-neutral-800 bg-neutral-900/70 p-3 flex flex-col gap-3 md:flex-row md:items-start">
+              {searchResult.image && (
+                <img
+                  src={searchResult.image}
+                  alt={searchResult.name || "Token image"}
+                  className="h-32 w-32 rounded-md object-cover border"
+                />
+              )}
+              <div className="space-y-1 text-sm">
+                <p className="font-semibold">{searchResult.name}</p>
+                <p className="text-muted-foreground">Token ID : {searchResult.tokenId}</p>
+                {searchResult.goldPrice && (
+                  <p className="text-muted-foreground">
+                    Gold price (feed) :{" "}
+                    {formatUsd(searchResult.goldPrice) ?? searchResult.goldPrice}
+                  </p>
+                )}
+                {searchResult.pieceValue && (
+                  <p className="text-muted-foreground">
+                    Piece value :{" "}
+                    {formatUsd(searchResult.pieceValue) ??
+                      searchResult.pieceValue}
+                  </p>
+                )}
+                {formatWeight(
+                  searchResult.pieceValue,
+                  searchResult.goldPrice,
+                  searchResult.quality,
+                ) && (
+                  <p className="text-muted-foreground">
+                    Poids estimé :{" "}
+                    {formatWeight(
+                      searchResult.pieceValue,
+                      searchResult.goldPrice,
+                      searchResult.quality,
+                    )}
+                  </p>
+                )}
+                {searchResult.quality && (
+                  <p className="text-muted-foreground">Qualité : {searchResult.quality}</p>
+                )}
+                {searchResult.amount && (
+                  <p className="text-muted-foreground">Quantité : {searchResult.amount}</p>
+                )}
+                {searchResult.uri && (
+                  <p className="text-muted-foreground break-all">
+                    URI : {searchResult.uri}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
         </div>
       )}
     </div>

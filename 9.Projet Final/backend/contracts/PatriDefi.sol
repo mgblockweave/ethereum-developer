@@ -40,7 +40,7 @@ contract PatriDeFi is Ownable {
     Gold1155 public goldNft;
     AggregatorV3Interface public priceFeed;
 
-    uint256 private constant MG_PER_OUNCE = 31_103_476; // ~31.103476 g en milligrammes
+    uint256 private constant MG_PER_OUNCE = 31_103; // ~31.103 g en milligrammes
 
     event CustomerRegistered(
         address indexed wallet,

@@ -8,17 +8,6 @@ export const ADMIN_ADDRESS =
 
 export const CONTRACT_ABI = [
   {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "gold1155Address",
-        "type": "address"
-      }
-    ],
-    "stateMutability": "nonpayable",
-    "type": "constructor"
-  },
-  {
     "anonymous": false,
     "inputs": [
       {
@@ -181,6 +170,19 @@ export const CONTRACT_ABI = [
     "type": "function"
   },
   {
+    "inputs": [],
+    "name": "priceFeed",
+    "outputs": [
+      {
+        "internalType": "contract AggregatorV3Interface",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
     "inputs": [
       {
         "internalType": "address",
@@ -198,16 +200,21 @@ export const CONTRACT_ABI = [
         "type": "bytes32"
       },
       {
-        "internalType": "uint256",
-        "name": "amount",
-        "type": "uint256"
+        "internalType": "uint256[]",
+        "name": "weightsMg",
+        "type": "uint256[]"
+      },
+      {
+        "internalType": "uint8[]",
+        "name": "qualities",
+        "type": "uint8[]"
       }
     ],
-    "name": "registerCustomerAndMint",
+    "name": "registerCustomerAndMintDetailed",
     "outputs": [
       {
         "internalType": "uint256",
-        "name": "tokenId",
+        "name": "lastTokenId",
         "type": "uint256"
       }
     ],
