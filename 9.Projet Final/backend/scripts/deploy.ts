@@ -31,28 +31,28 @@ async function main() {
   console.log("MockGoldPriceFeed deployed at:", priceFeedAddress);
 
   // Deploy ERC1155
-  const Gold1155 = await ethers.getContractFactory("Gold1155");
-  const gold1155 = await Gold1155.deploy(baseUri);
-  await gold1155.waitForDeployment();
-  const gold1155Address = await gold1155.getAddress();
-  console.log("Gold1155 deployed at:", gold1155Address);
+  const NftPatriD = await ethers.getContractFactory("NftPatriD");
+  const nftPatriD = await NftPatriD.deploy(baseUri);
+  await nftPatriD.waitForDeployment();
+  const nftPatriDAddress = await nftPatriD.getAddress();
+  console.log("NftPatriD (ERC1155) deployed at:", nftPatriDAddress);
 
-  // Deploy PatriDeFi pointing to Gold1155 and price feed (respect exact contract name)
+  // Deploy PatriDeFi pointing to ERC1155 and price feed
   const PatriDeFi = await ethers.getContractFactory("PatriDeFi");
-  const patriDeFi = await PatriDeFi.deploy(gold1155Address, priceFeedAddress);
+  const patriDeFi = await PatriDeFi.deploy(nftPatriDAddress, priceFeedAddress);
   await patriDeFi.waitForDeployment();
   const patriDeFiAddress = await patriDeFi.getAddress();
   console.log("PatriDeFi deployed at:", patriDeFiAddress);
 
-  // Set PatriDefi as minter on Gold1155
-  const tx = await gold1155.setMinter(patriDeFiAddress);
+  // Set PatriDeFi as minter on NftPatriD
+  const tx = await nftPatriD.setMinter(patriDeFiAddress);
   await tx.wait();
-  console.log("Gold1155 minter set to PatriDefi");
+  console.log("NftPatriD minter set to PatriDeFi");
 
   // Ensure URI points to the local metadata API
-  const baseTx = await gold1155.setBaseURI(baseUri);
+  const baseTx = await nftPatriD.setBaseURI(baseUri);
   await baseTx.wait();
-  console.log("Gold1155 base URI set to:", baseUri);
+  console.log("NftPatriD base URI set to:", baseUri);
 
   const demoMintEnabled = DEMO_MINT && isLocal;
   if (demoMintEnabled) {
@@ -68,26 +68,22 @@ async function main() {
       qualities
     );
     await mintTx.wait();
-    const tokenUri = await gold1155.uri(1);
+    const tokenUri = await nftPatriD.uri(1);
     console.log("Demo token #1 minted to admin. URI:", tokenUri);
   }
-
-  console.log("Admin/Owner (for NEXT_PUBLIC_ADMIN_ADDRESS):", deployer.address);
 
   // Propagate addresses to frontend/ponder env files when running locally
   if (isLocal) {
     upsertEnv("../frontend/.env.local", {
-      NEXT_PUBLIC_GOLD1155_ADDRESS: gold1155Address,
+      NEXT_PUBLIC_PATRI_D_NFT_ADDRESS: nftPatriDAddress,
       NEXT_PUBLIC_PATRI_DEFI_ADDRESS: patriDeFiAddress,
-      NEXT_PUBLIC_ADMIN_ADDRESS: deployer.address,
     });
     upsertEnv("../frontend/.env.local.hardhat", {
-      NEXT_PUBLIC_GOLD1155_ADDRESS: gold1155Address,
+      NEXT_PUBLIC_PATRI_D_NFT_ADDRESS: nftPatriDAddress,
       NEXT_PUBLIC_PATRI_DEFI_ADDRESS: patriDeFiAddress,
-      NEXT_PUBLIC_ADMIN_ADDRESS: deployer.address,
     });
     upsertEnv("../ponder/.env.local", {
-      NEXT_PUBLIC_GOLD1155_ADDRESS: gold1155Address,
+      NEXT_PUBLIC_PATRI_D_NFT_ADDRESS: nftPatriDAddress,
       NEXT_PUBLIC_PATRI_DEFI_ADDRESS: patriDeFiAddress,
     });
   } else {

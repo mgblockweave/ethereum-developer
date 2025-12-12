@@ -14,11 +14,8 @@ import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { Alert, AlertDescription } from "../ui/alert";
 
-import {
-  CONTRACT_ABI,
-  CONTRACT_ADDRESS,
-  ADMIN_ADDRESS,
-} from "@/utils/constants";
+import { CONTRACT_ABI, CONTRACT_ADDRESS } from "@/utils/constants";
+import { useReadContract } from "wagmi";
 
 type CustomerForm = {
   firstName: string;
@@ -134,10 +131,19 @@ export const PatriDefiAdmin = () => {
   };
 
   // Check admin
-  const isAdmin =
-    isConnected &&
-    connectedAddress &&
-    connectedAddress.toLowerCase() === ADMIN_ADDRESS.toLowerCase();
+  const { data: isAdminData } = useReadContract({
+    abi: CONTRACT_ABI as any,
+    address: CONTRACT_ADDRESS as `0x${string}`,
+    functionName: "isAdmin",
+    args: connectedAddress ? [connectedAddress as `0x${string}`] : undefined,
+    query: {
+      enabled: Boolean(connectedAddress),
+    },
+  });
+
+  const isAdmin = Boolean(
+    isConnected && connectedAddress && (isAdminData as boolean)
+  );
 
   const {
     data: txHash,
@@ -381,13 +387,17 @@ export const PatriDefiAdmin = () => {
 
     // Call smart contract
     const targetContract = CONTRACT_ADDRESS as `0x${string}`;
-    if (!targetContract || targetContract === "0x0000000000000000000000000000000000000000") {
-      setError("Adresse du contrat PatriDeFi non configurée (NEXT_PUBLIC_PATRI_DEFI_ADDRESS).");
+    if (
+      !targetContract ||
+      targetContract === "0x0000000000000000000000000000000000000000"
+    ) {
+      setError(
+        "Adresse du contrat PatriDeFi non configurée (NEXT_PUBLIC_PATRI_DEFI_ADDRESS)."
+      );
       return;
     }
 
-    // Les NFTs doivent être détenus par l'admin (custodie)
-    const recipient = ADMIN_ADDRESS as `0x${string}`;
+    const recipient = normalizedWallet as `0x${string}`;
 
     try {
       writeContract({

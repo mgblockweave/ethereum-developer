@@ -3,7 +3,7 @@
 ## Project Overview
 
 This is an **Ethereum developer learning repository** organized by topic (Solidity, Hardhat, Foundry, Testing) with a final capstone project (`9. Projet Final`) that combines:
-- **Backend**: ERC1155 NFT contracts (Gold1155, PatriDeFi) deployed with Hardhat 3 Beta
+- **Backend**: ERC1155 NFT contracts (patriD, PatriDeFi) deployed with Hardhat 3 Beta
 - **Frontend**: Next.js + wagmi + RainbowKit dApp for on-chain interaction
 
 The project demonstrates bridging off-chain data (Supabase) with on-chain smart contracts.
@@ -13,14 +13,14 @@ The project demonstrates bridging off-chain data (Supabase) with on-chain smart 
 ### Backend (`9.Projet Final/backend`)
 
 **Key contracts:**
-- `Gold1155.sol` - ERC1155 token contract for gold positions; mints tokens called by PatriDeFi
-- `PatriDeFi.sol` - Owner-controlled coordinator that bridges Supabase customer records to on-chain; calls Gold1155 to mint
+- `patriD.sol` - ERC1155 token contract for gold positions; mints tokens called by PatriDeFi
+- `PatriDeFi.sol` - Owner-controlled coordinator that bridges Supabase customer records to on-chain; calls patriD to mint
 
-**Critical pattern**: PatriDeFi acts as the minter for Gold1155. Off-chain flow:
+**Critical pattern**: PatriDeFi acts as the minter for patriD. Off-chain flow:
 1. Save customer data to Supabase
 2. Compute `dataHash = keccak256(JSON payload)` and `supabaseId = keccak256(UUID)`
 3. Call `PatriDeFi.registerAndMintPosition()` from admin wallet
-4. PatriDeFi internally calls `Gold1155.mintForCustomer()`
+4. PatriDeFi internally calls `patriD.mintForCustomer()`
 
 **Stack**:
 - Hardhat 3 Beta (latest, with EDR simulated networks)
@@ -122,7 +122,7 @@ npm run lint       # ESLint check
 | File | Purpose |
 |------|---------|
 | `backend/hardhat.config.ts` | Network config, plugin setup, Solidity profiles (default & production) |
-| `backend/contracts/Gold1155.sol` | ERC1155 core logic; minter pattern |
+| `backend/contracts/patriD.sol` | ERC1155 core logic; minter pattern |
 | `backend/contracts/PatriDeFi.sol` | Admin coordinator; Supabase ↔ blockchain bridge |
 | `backend/ignition/modules/Counter.ts` | Ignition deployment template |
 | `frontend/src/providers/RaibowKitAndWagMiProvider.tsx` | Wagmi + RainbowKit setup |
@@ -134,7 +134,7 @@ npm run lint       # ESLint check
 - **EDR Simulated Networks**: `hardhatMainnet` and `hardhatOp` are built-in fast simulations; no separate local node needed for most development
 - **Configuration Variables**: Use `configVariable()` in hardhat.config for secrets (SEPOLIA_PRIVATE_KEY, SEPOLIA_RPC_URL)
 - **Private Keys**: Never commit `.env` or keys; use hardhat-keystore plugin to store securely
-- **Contracts Deploy Order**: PatriDeFi depends on Gold1155; deploy Gold1155 first, pass address to PatriDeFi constructor
+- **Contracts Deploy Order**: PatriDeFi depends on patriD; deploy patriD first, pass address to PatriDeFi constructor
 
 ## Testing AI-Generated Code
 

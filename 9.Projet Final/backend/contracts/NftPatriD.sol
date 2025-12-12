@@ -5,10 +5,10 @@ import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 
-/// @title Gold1155 - ERC1155 tokens representing gold positions
+/// @title NftPatriD - ERC1155 tokens representing gold positions
 /// @notice This contract is responsible only for minting and tracking ERC1155 tokens.
 ///         PatriDeFi contract will call this one as a minter.
-contract Gold1155 is ERC1155, Ownable {
+contract NftPatriD is ERC1155, Ownable {
     using Strings for uint256;
 
     struct GoldToken {
@@ -45,18 +45,18 @@ contract Gold1155 is ERC1155, Ownable {
     }
 
     function uri(uint256 tokenId) public view override returns (string memory) {
-        require(tokenId > 0 && tokenId < _nextTokenId, "Gold1155: URI query for nonexistent token");
+        require(tokenId > 0 && tokenId < _nextTokenId, "NftPatriD: URI query for nonexistent token");
         return string(abi.encodePacked(_baseURI, tokenId.toString(), ".json"));
     }
 
     modifier onlyMinter() {
-        require(msg.sender == minter, "Gold1155: caller is not the minter");
+        require(msg.sender == minter, "NftPatriD: caller is not the minter");
         _;
     }
 
     /// @notice Set the PatriDeFi contract as minter
     function setMinter(address _minter) external onlyOwner {
-        require(_minter != address(0), "Gold1155: zero address");
+        require(_minter != address(0), "NftPatriD: zero address");
         minter = _minter;
         emit MinterUpdated(_minter);
     }
@@ -75,10 +75,10 @@ contract Gold1155 is ERC1155, Ownable {
         uint8 quality,
         uint256 pieceValue
     ) external onlyMinter returns (uint256 tokenId) {
-        require(to != address(0), "Gold1155: invalid recipient");
-        require(supabaseId != bytes32(0), "Gold1155: invalid Supabase id");
-        require(goldPrice > 0, "Gold1155: invalid gold price");
-        require(pieceValue > 0, "Gold1155: invalid piece value");
+        require(to != address(0), "NftPatriD: invalid recipient");
+        require(supabaseId != bytes32(0), "NftPatriD: invalid Supabase id");
+        require(goldPrice > 0, "NftPatriD: invalid gold price");
+        require(pieceValue > 0, "NftPatriD: invalid piece value");
 
         tokenId = _nextTokenId;
         _nextTokenId += 1;

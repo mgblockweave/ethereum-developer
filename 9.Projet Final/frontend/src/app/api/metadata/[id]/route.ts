@@ -3,7 +3,7 @@ import { createPublicClient, http } from "viem";
 import { hardhat } from "viem/chains";
 
 // Minimal ABI just for goldTokens()
-const GOLD1155_ABI = [
+const PATRI_D_NFT_ABI = [
   {
     inputs: [{ internalType: "uint256", name: "", type: "uint256" }],
     name: "goldTokens",
@@ -36,7 +36,7 @@ export async function GET(
 
   // Defaults
   const metadataBase = {
-    name: `PatriDeFi Gold #${id}`,
+    name: `PatriD #${id}`,
     description: "Napoléon tokenisé",
     image: `${origin}/napoleon.png`,
     attributes: [
@@ -46,11 +46,11 @@ export async function GET(
   };
 
   const rpcUrl = process.env.HARDHAT_RPC_URL || "http://localhost:8545";
-  const gold1155Address = process.env.NEXT_PUBLIC_GOLD1155_ADDRESS as
+  const patriDAddress = process.env.NEXT_PUBLIC_PATRI_D_NFT_ADDRESS as
     | `0x${string}`
     | undefined;
 
-  if (!gold1155Address) {
+  if (!patriDAddress) {
     return NextResponse.json(metadataBase);
   }
 
@@ -62,8 +62,8 @@ export async function GET(
 
     const [supabaseId, amount, goldPrice, quality, pieceValue] =
       (await client.readContract({
-        address: gold1155Address,
-        abi: GOLD1155_ABI,
+        address: patriDAddress,
+        abi: PATRI_D_NFT_ABI,
         functionName: "goldTokens",
         args: [BigInt(id)],
       })) as [

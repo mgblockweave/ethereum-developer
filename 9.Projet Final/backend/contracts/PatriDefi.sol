@@ -2,7 +2,7 @@
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "./Gold1155.sol";
+import "./NftPatriD.sol";
 
 interface AggregatorV3Interface {
     function latestRoundData()
@@ -36,8 +36,10 @@ contract PatriDeFi is Ownable {
     }
 
     mapping(address => Customer) public customers;
+    mapping(address => bool) private admins;
+    address[] private adminList;
 
-    Gold1155 public goldNft;
+    NftPatriD public goldNft;
     AggregatorV3Interface public priceFeed;
 
     uint256 private constant MG_PER_OUNCE = 31_103; // ~31.103 g en milligrammes
@@ -60,17 +62,50 @@ contract PatriDeFi is Ownable {
         uint256 amount
     );
 
-    /// @param gold1155Address Deployed Gold1155 contract address
+    event AdminAdded(address indexed account);
+    event AdminRemoved(address indexed account);
+
+    modifier onlyAdmin() {
+        require(admins[msg.sender], "PatriDeFi: not admin");
+        _;
+    }
+
+    /// @param patriDAddress Deployed NftPatriD (ERC1155) contract address
     /// @param priceFeedAddress Chainlink price feed for gold (per ounce)
-    constructor(address gold1155Address, address priceFeedAddress) Ownable(msg.sender) {
-        require(gold1155Address != address(0), "PatriDeFi: zero address");
+    constructor(address patriDAddress, address priceFeedAddress) Ownable(msg.sender) {
+        require(patriDAddress != address(0), "PatriDeFi: zero address");
         require(priceFeedAddress != address(0), "PatriDeFi: zero feed");
-        goldNft = Gold1155(gold1155Address);
+        goldNft = NftPatriD(patriDAddress);
         priceFeed = AggregatorV3Interface(priceFeedAddress);
+        _addAdmin(msg.sender);
+    }
+
+    /// @notice Owner can add an admin (admins cannot add more admins)
+    function addAdmin(address account) external onlyOwner {
+        _addAdmin(account);
+    }
+
+    /// @notice Owner can remove an admin (owner itself cannot be removed)
+    function removeAdmin(address account) external onlyOwner {
+        require(account != owner(), "PatriDeFi: cannot remove owner");
+        require(admins[account], "PatriDeFi: not admin");
+        admins[account] = false;
+        _removeFromList(account);
+        emit AdminRemoved(account);
+    }
+
+    /// @notice Check if an address is admin
+    function isAdmin(address account) external view returns (bool) {
+        return admins[account];
+    }
+
+    /// @notice Returns the full list of admins (owner-only)
+    function getAdmins() external view onlyOwner returns (address[] memory) {
+        return adminList;
     }
 
     /// @notice Register or update a customer and mint a gold position NFT
-    /// @dev Only the owner (admin) can call this.
+    /// @dev Only admins can call this. Admins are managed by the owner.
     ///      Off-chain flow should be:
     ///        1. Save customer + Napoleons details into Supabase
     ///        2. Compute dataHash = keccak256(JSON(payload))
@@ -88,7 +123,7 @@ contract PatriDeFi is Ownable {
         bytes32 dataHash,
         uint256[] calldata weightsMg,
         Quality[] calldata qualities
-    ) external onlyOwner returns (uint256 lastTokenId) {
+    ) external onlyAdmin returns (uint256 lastTokenId) {
         require(wallet != address(0), "PatriDeFi: invalid wallet");
         require(supabaseId != bytes32(0), "PatriDeFi: invalid Supabase id");
         require(weightsMg.length > 0, "PatriDeFi: no pieces");
@@ -131,7 +166,7 @@ contract PatriDeFi is Ownable {
     function updateCustomerDataHash(
         address wallet,
         bytes32 newDataHash
-    ) external onlyOwner {
+    ) external onlyAdmin {
         require(customers[wallet].exists, "PatriDeFi: customer not found");
         customers[wallet].dataHash = newDataHash;
         emit CustomerUpdated(wallet, customers[wallet].supabaseId, newDataHash);
@@ -148,5 +183,24 @@ contract PatriDeFi is Ownable {
         if (q == Quality.SUP) return 9500; // 95%
         if (q == Quality.SPL) return 9750; // 97.5%
         return 10000; // FDC = 100%
+    }
+
+    function _addAdmin(address account) internal {
+        require(account != address(0), "PatriDeFi: zero address");
+        if (admins[account]) return;
+        admins[account] = true;
+        adminList.push(account);
+        emit AdminAdded(account);
+    }
+
+    function _removeFromList(address account) internal {
+        uint256 len = adminList.length;
+        for (uint256 i = 0; i < len; i++) {
+            if (adminList[i] == account) {
+                adminList[i] = adminList[len - 1];
+                adminList.pop();
+                break;
+            }
+        }
     }
 }

@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import hre from "hardhat";
 
-describe("PatriDeFi / Gold1155 integration", () => {
+describe("PatriDeFi / NftPatriD integration", () => {
   const uri = "https://example.com/{id}.json";
   const goldPrice = 2_000_00000000n; // 2000 * 1e8
 
@@ -15,32 +15,29 @@ describe("PatriDeFi / Gold1155 integration", () => {
     await feed.waitForDeployment();
 
     // Deploy ERC1155
-    const Gold1155 = await ethers.getContractFactory("Gold1155");
-    const gold = await Gold1155.deploy("https://patridefi.example/metadata/");
+    const patriD = await ethers.getContractFactory("NftPatriD");
+    const gold = await patriD.deploy("https://patridefi.example/metadata/");
     await gold.waitForDeployment();
 
-    // Deploy PatriDeFi pointing to Gold1155 + feed
+    // Deploy PatriDeFi pointing to ERC1155 + feed
     const PatriDeFi = await ethers.getContractFactory("PatriDeFi");
     const patri = await PatriDeFi.deploy(await gold.getAddress(), await feed.getAddress());
     await patri.waitForDeployment();
 
-    // Authorize PatriDeFi as minter
+    // Authorize NftPatriD as minter
     await gold.setMinter(await patri.getAddress());
 
     // Prepare payload
     const supabaseId = ethers.keccak256(ethers.toUtf8Bytes("dummy-uuid"));
     const dataHash = ethers.keccak256(ethers.toUtf8Bytes("dummy-payload"));
     const amount = 3; // 3 pièces => 3 tokens distincts
+    const weights = [31_000, 31_000, 31_000];
+    const qualities = [0, 0, 0];
 
     // Mint to admin (custody)
     const tx = await patri
       .connect(admin)
-      .registerCustomerAndMint(
-        admin.address,
-        supabaseId,
-        dataHash,
-        amount
-      );
+      .registerCustomerAndMintDetailed(admin.address, supabaseId, dataHash, weights, qualities);
     const receipt = await tx.wait();
 
     // Check events: expect 3 GoldTokenMinted, each amount=1, goldPrice recorded
@@ -75,7 +72,7 @@ describe("PatriDeFi / Gold1155 integration", () => {
       );
     }
 
-    // PatriDeFi storage
+    // NftPatriD storage
     const customer = await patri.customers(admin.address);
     expect(customer.exists).to.equal(true);
     expect(customer.supabaseId).to.equal(supabaseId);
@@ -83,7 +80,29 @@ describe("PatriDeFi / Gold1155 integration", () => {
 
     // Ensure non-owner cannot mint directly
     await expect(
-      gold.connect(other).mintForCustomer(other.address, supabaseId, 1)
-    ).to.be.revertedWith("Gold1155: caller is not the minter");
+      gold.connect(other).mintForCustomer(other.address, supabaseId, goldPrice, 0, 1)
+    ).to.be.revertedWith("NftPatriD: caller is not the minter");
+
+    // Non-admin cannot call PatriDeFi
+    await expect(
+      patri
+        .connect(other)
+        .registerCustomerAndMintDetailed(other.address, supabaseId, dataHash, weights, qualities)
+    ).to.be.revertedWith("PatriDeFi: not admin");
+
+    // Owner can grant admin rights
+    await patri.addAdmin(other.address);
+    expect(await patri.isAdmin(other.address)).to.equal(true);
+    const admins = await patri.getAdmins();
+    expect(admins).to.include.members([admin.address, other.address]);
+    await expect(
+      patri
+        .connect(other)
+        .registerCustomerAndMintDetailed(other.address, supabaseId, dataHash, weights, qualities)
+    ).to.not.be.reverted;
+
+    // Owner can remove admin (but not itself)
+    await patri.removeAdmin(other.address);
+    expect(await patri.isAdmin(other.address)).to.equal(false);
   });
 });

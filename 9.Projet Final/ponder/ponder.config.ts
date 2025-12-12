@@ -3,10 +3,10 @@ import { createConfig } from "@ponder/core";
 import { http } from "viem";
 import type { Abi } from "abitype";
 import PatriDeFiArtifact from "../backend/artifacts/contracts/PatriDeFi.sol/PatriDeFi.json" assert { type: "json" };
-import Gold1155Artifact from "../backend/artifacts/contracts/Gold1155.sol/Gold1155.json" assert { type: "json" };
+import PatriDNftArtifact from "../backend/artifacts/contracts/NftPatriD.sol/NftPatriD.json" assert { type: "json" };
 
 const PatriDeFiAbi = PatriDeFiArtifact.abi as Abi;
-const Gold1155Abi = Gold1155Artifact.abi as Abi;
+const PatriDNftAbi = PatriDNftArtifact.abi as Abi;
 
 const isLocal = process.env.PONDER_NETWORK === "localhost";
 
@@ -43,10 +43,10 @@ const contracts: Contracts = isLocal
         abi: PatriDeFiAbi,
         startBlock: 0,
       },
-      Gold1155: {
+      PatriDNft: {
         network: "localhost",
-        address: requireEnv<`0x${string}`>("GOLD1155_ADDRESS_LOCAL"),
-        abi: Gold1155Abi,
+        address: requireEnv<`0x${string}`>("PATRI_D_NFT_ADDRESS_LOCAL"),
+        abi: PatriDNftAbi,
         startBlock: 0,
       },
     }
@@ -57,10 +57,10 @@ const contracts: Contracts = isLocal
         abi: PatriDeFiAbi,
         startBlock: 9813263,
       },
-      Gold1155: {
+      PatriDNft: {
         network: "sepolia",
-        address: requireEnv<`0x${string}`>("GOLD1155_ADDRESS"),
-        abi: Gold1155Abi,
+        address: requireEnv<`0x${string}`>("PATRI_D_NFT_ADDRESS"),
+        abi: PatriDNftAbi,
         startBlock: 9813264,
       },
     };

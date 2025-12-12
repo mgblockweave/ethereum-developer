@@ -6,20 +6,24 @@ import {
   darkTheme
 } from '@rainbow-me/rainbowkit';
 import { WagmiProvider } from 'wagmi';
-import {
-  hardhat
-} from 'wagmi/chains';
+import { hardhat, sepolia } from 'wagmi/chains';
 import {
   QueryClientProvider,
   QueryClient,
 } from "@tanstack/react-query";
 
 
+const projectId = process.env.NEXT_PUBLIC_WC_PROJECT_ID;
+
+if (!projectId) {
+  console.warn("NEXT_PUBLIC_WC_PROJECT_ID is not set; WalletConnect will be unavailable.");
+}
+
 const config = getDefaultConfig({
-  appName: 'My RainbowKit App',
-  projectId: 'YOUR_PROJECT_ID',
-  chains: [hardhat],
-  ssr: true, // If your dApp uses server side rendering (SSR)
+  appName: 'PatriDeFi',
+  projectId: projectId ?? 'placeholder',
+  chains: [sepolia, hardhat],
+  ssr: true, // SSR enabled
 });
 
 const queryClient = new QueryClient();

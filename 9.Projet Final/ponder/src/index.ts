@@ -8,7 +8,7 @@ type KnownEvent =
   | "PatriDeFi:CustomerRegistered"
   | "PatriDeFi:CustomerUpdated"
   | "PatriDeFi:CustomerPositionCreated"
-  | "Gold1155:GoldTokenMinted";
+  | "PatriDNft:GoldTokenMinted";
 type IndexHandler = (args: { event: any; context: any }) => Promise<void> | void;
 const on = (event: KnownEvent, handler: IndexHandler) =>
   (ponder as any).on(event, handler as any);
@@ -77,7 +77,7 @@ on("PatriDeFi:CustomerPositionCreated", async ({ event, context }) => {
   logger.info("CustomerPositionCreated", { wallet, tokenId, amount });
 });
 
-on("Gold1155:GoldTokenMinted", async ({ event, context }) => {
+on("PatriDNft:GoldTokenMinted", async ({ event, context }) => {
   const logger = getLogger(context);
   const { tokenId, to, supabaseId, goldPrice, quality, pieceValue } =
     event.args;

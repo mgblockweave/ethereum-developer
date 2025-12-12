@@ -2,9 +2,10 @@ export const CONTRACT_ADDRESS =
   process.env.NEXT_PUBLIC_PATRI_DEFI_ADDRESS ||
   "0xbcd4042de499d14e55001ccbb24a551f3b954096";
 
-export const ADMIN_ADDRESS =
-  process.env.NEXT_PUBLIC_ADMIN_ADDRESS ||
+export const PATRI_D_NFT_ADDRESS =
+  process.env.NEXT_PUBLIC_PATRI_D_NFT_ADDRESS ||
   "0xbcd4042de499d14e55001ccbb24a551f3b954096";
+
 
 export const CONTRACT_ABI = [
   {
@@ -135,9 +136,41 @@ export const CONTRACT_ABI = [
     "name": "goldNft",
     "outputs": [
       {
-        "internalType": "contract Gold1155",
+        "internalType": "contract NftPatriD",
         "name": "",
         "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "account",
+        "type": "address"
+      }
+    ],
+    "name": "isAdmin",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "getAdmins",
+    "outputs": [
+      {
+        "internalType": "address[]",
+        "name": "",
+        "type": "address[]"
       }
     ],
     "stateMutability": "view",
@@ -222,6 +255,19 @@ export const CONTRACT_ABI = [
     "type": "function"
   },
   {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "account",
+        "type": "address"
+      }
+    ],
+    "name": "addAdmin",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
     "inputs": [],
     "name": "renounceOwnership",
     "outputs": [],
@@ -237,6 +283,19 @@ export const CONTRACT_ABI = [
       }
     ],
     "name": "transferOwnership",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "account",
+        "type": "address"
+      }
+    ],
+    "name": "removeAdmin",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
