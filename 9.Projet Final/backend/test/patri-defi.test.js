@@ -2,7 +2,7 @@ import { expect } from "chai";
 import hre from "hardhat";
 
 describe("PatriDeFi / NftPatriD integration", () => {
-  const uri = "https://example.com/{id}.json";
+  const uri = "https://patridefi.vercel.app/{id}.json";
   const goldPrice = 2_000_00000000n; // 2000 * 1e8
 
   it("mints ERC1155 to the admin and stores Supabase reference", async () => {
@@ -16,7 +16,7 @@ describe("PatriDeFi / NftPatriD integration", () => {
 
     // Deploy ERC1155
     const patriD = await ethers.getContractFactory("NftPatriD");
-    const gold = await patriD.deploy("https://patridefi.example/metadata/");
+    const gold = await patriD.deploy("https://patridefi.vercel.app/metadata/");
     await gold.waitForDeployment();
 
     // Deploy PatriDeFi pointing to ERC1155 + feed
@@ -68,7 +68,7 @@ describe("PatriDeFi / NftPatriD integration", () => {
       expect(stored.amount).to.equal(1n);
       expect(stored.goldPrice).to.equal(goldPrice);
       expect(await gold.uri(tokenId)).to.equal(
-        `https://patridefi.example/metadata/${tokenId}.json`
+        `https://patridefi.vercel.app/metadata/${tokenId}.json`
       );
     }
 

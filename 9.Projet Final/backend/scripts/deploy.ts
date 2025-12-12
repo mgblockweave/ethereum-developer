@@ -21,7 +21,7 @@ async function main() {
     process.env.BASE_URI ??
     (isLocal
       ? "http://localhost:3000/api/metadata/"
-      : "https://patridefi.example/metadata/");
+      : "https://patridefi.vercel.app/metadata/");
 
   // Deploy mock price feed (gold price per ounce, 8 decimals). Example: 2000 USD = 2000 * 1e8
   const MockGoldPriceFeed = await ethers.getContractFactory("MockGoldPriceFeed");
