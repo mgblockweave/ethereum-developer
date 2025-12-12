@@ -1,7 +1,7 @@
 {
   "version": 2,
   "framework": "nextjs",
-  "buildCommand": "cd 9.Projet\\ Final/frontend && npm install && npm run build",
-  "outputDirectory": "9.Projet Final/frontend/.next",
-  "installCommand": "cd 9.Projet\\ Final/frontend && npm install"
+  "installCommand": "npm install --prefix \"9.Projet Final/frontend\"",
+  "buildCommand": "npm run build --prefix \"9.Projet Final/frontend\"",
+  "outputDirectory": "9.Projet Final/frontend/.next"
 }
