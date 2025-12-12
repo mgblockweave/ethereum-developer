@@ -21,10 +21,14 @@ const GOLD1155_ABI = [
 
 const qualityLabels = ["TB", "TTB", "SUP", "SPL", "FDC"];
 
-export async function GET(req: NextRequest, ctx: { params: { id?: string } }) {
+export async function GET(
+  req: NextRequest,
+  ctx: { params: Promise<{ id?: string }> },
+) {
   const pathname = new URL(req.url).pathname;
+  const providedParams = await ctx.params;
   const rawId =
-    ctx.params?.id ??
+    providedParams?.id ??
     pathname.split("/").filter(Boolean).pop() ??
     "0";
   const id = rawId.replace(/\.json$/i, "");
@@ -42,8 +46,13 @@ export async function GET(req: NextRequest, ctx: { params: { id?: string } }) {
   };
 
   const rpcUrl = process.env.HARDHAT_RPC_URL || "http://localhost:8545";
-  const gold1155Address = process.env
-    .NEXT_PUBLIC_GOLD1155_ADDRESS as `0x${string}`;
+  const gold1155Address = process.env.NEXT_PUBLIC_GOLD1155_ADDRESS as
+    | `0x${string}`
+    | undefined;
+
+  if (!gold1155Address) {
+    return NextResponse.json(metadataBase);
+  }
 
   try {
     const client = createPublicClient({
