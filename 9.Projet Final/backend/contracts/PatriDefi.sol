@@ -2,6 +2,7 @@
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/Pausable.sol";
 import "./NftPatriD.sol";
 
 interface AggregatorV3Interface {
@@ -20,7 +21,7 @@ interface AggregatorV3Interface {
 /// @title PatriDeFi - Links off-chain Supabase records with on-chain ERC1155 gold NFTs
 /// @notice Frontend/backend must first write data into Supabase, then call this contract
 ///         with the Supabase customer identifier and a hash of the full payload.
-contract PatriDeFi is Ownable {
+contract PatriDeFi is Ownable, Pausable {
     enum Quality {
         TB,   // Très Bon
         TTB,  // Très Très Beau
@@ -38,11 +39,15 @@ contract PatriDeFi is Ownable {
     mapping(address => Customer) public customers;
     mapping(address => bool) private admins;
     address[] private adminList;
+    mapping(address => uint256) public totalPieceValue; // total pieceValue (1e8 scale) minted for a wallet
 
     NftPatriD public goldNft;
     AggregatorV3Interface public priceFeed;
 
     uint256 private constant MG_PER_OUNCE = 31_103; // ~31.103 g en milligrammes
+    uint256 private constant MAX_BATCH = 100;
+    uint256 private constant MAX_WEIGHT_MG = 1_000_000; // 1000 g
+    uint256 private constant MAX_PIECE_VALUE = 1e24;   // generous upper bound
 
     event CustomerRegistered(
         address indexed wallet,
@@ -123,11 +128,13 @@ contract PatriDeFi is Ownable {
         bytes32 dataHash,
         uint256[] calldata weightsMg,
         Quality[] calldata qualities
-    ) external onlyAdmin returns (uint256 lastTokenId) {
+    ) external onlyAdmin whenNotPaused returns (uint256 lastTokenId) {
         require(wallet != address(0), "PatriDeFi: invalid wallet");
         require(supabaseId != bytes32(0), "PatriDeFi: invalid Supabase id");
+        require(dataHash != bytes32(0), "PatriDeFi: invalid data hash");
         require(weightsMg.length > 0, "PatriDeFi: no pieces");
         require(weightsMg.length == qualities.length, "PatriDeFi: arrays mismatch");
+        require(weightsMg.length <= MAX_BATCH, "PatriDeFi: batch too large");
 
         bool alreadyExists = customers[wallet].exists;
 
@@ -148,15 +155,24 @@ contract PatriDeFi is Ownable {
         require(price > 0, "PatriDeFi: invalid gold price");
         uint256 goldPrice = uint256(price);
 
+        uint256 totalAdded;
+        address recipient = owner(); // always custody NFTs on admin/owner
         // Mint one ERC1155 per piece
         for (uint256 i = 0; i < weightsMg.length; i++) {
             uint256 w = weightsMg[i];
             require(w > 0, "PatriDeFi: invalid weight");
+            require(w <= MAX_WEIGHT_MG, "PatriDeFi: weight too large");
+            require(uint256(uint8(qualities[i])) <= uint256(uint8(Quality.FDC)), "PatriDeFi: invalid quality");
             uint256 bps = _qualityToBps(qualities[i]);
             uint256 pieceValue = (goldPrice * w * bps) / (10000 * MG_PER_OUNCE);
             require(pieceValue > 0, "PatriDeFi: piece value too low");
-            lastTokenId = goldNft.mintForCustomer(wallet, supabaseId, goldPrice, uint8(qualities[i]), pieceValue);
+            require(pieceValue <= MAX_PIECE_VALUE, "PatriDeFi: piece value too high");
+            lastTokenId = goldNft.mintForCustomer(recipient, supabaseId, goldPrice, uint8(qualities[i]), pieceValue);
+            totalAdded += pieceValue;
             emit CustomerPositionCreated(wallet, lastTokenId, 1);
+        }
+        if (totalAdded > 0) {
+            totalPieceValue[wallet] += totalAdded;
         }
     }
 
@@ -166,8 +182,9 @@ contract PatriDeFi is Ownable {
     function updateCustomerDataHash(
         address wallet,
         bytes32 newDataHash
-    ) external onlyAdmin {
+    ) external onlyAdmin whenNotPaused {
         require(customers[wallet].exists, "PatriDeFi: customer not found");
+        require(newDataHash != bytes32(0), "PatriDeFi: invalid data hash");
         customers[wallet].dataHash = newDataHash;
         emit CustomerUpdated(wallet, customers[wallet].supabaseId, newDataHash);
     }
@@ -202,5 +219,14 @@ contract PatriDeFi is Ownable {
                 break;
             }
         }
+    }
+
+    /// @notice Emergency pause/unpause by owner
+    function pause() external onlyOwner {
+        _pause();
+    }
+
+    function unpause() external onlyOwner {
+        _unpause();
     }
 }

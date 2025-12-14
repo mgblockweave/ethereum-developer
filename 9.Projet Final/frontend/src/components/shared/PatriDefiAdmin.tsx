@@ -7,14 +7,14 @@ import {
   useWaitForTransactionReceipt,
 } from "wagmi";
 
-import { keccak256, stringToBytes } from "viem";
+import { keccak256, stringToBytes, decodeEventLog, createPublicClient, http } from "viem";
 
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { Alert, AlertDescription } from "../ui/alert";
 
-import { CONTRACT_ABI, CONTRACT_ADDRESS } from "@/utils/constants";
+import { CONTRACT_ABI, CONTRACT_ADDRESS, PATRI_D_NFT_ADDRESS } from "@/utils/constants";
 import { useReadContract } from "wagmi";
 
 type CustomerForm = {
@@ -28,6 +28,7 @@ type Napoleon = {
   quantity: number;
   weight: number; // grams
   quality: string;
+  initialPrice?: number;
 };
 
 type CustomerRow = {
@@ -66,6 +67,8 @@ export const PatriDefiAdmin = () => {
   const [customers, setCustomers] = useState<CustomerRow[]>([]);
   const [listError, setListError] = useState<string | null>(null);
   const [listLoading, setListLoading] = useState(false);
+  const [pendingNapoleons, setPendingNapoleons] = useState<Napoleon[]>([]);
+  const [totalsMap, setTotalsMap] = useState<Record<string, bigint>>({});
 
   // Token lookup (by tokenId or supabaseId)
   const [searchInput, setSearchInput] = useState("");
@@ -81,26 +84,68 @@ export const PatriDefiAdmin = () => {
     amount?: string;
     uri?: string;
   } | null>(null);
+  const SUCCESS_TIMEOUT_MS = 5000;
+  const [lastWalletForTokens, setLastWalletForTokens] = useState<string | null>(null);
 
   // Utils
-  const formatUsd = (raw?: string) => {
-    if (!raw) return null;
-    const n = Number(raw);
-    if (Number.isNaN(n)) return raw;
-    const usd = n / 1e8; // feed and pieceValue are en 1e8
+const formatUsd = (raw?: string | number | bigint) => {
+  if (raw === undefined || raw === null) return null;
+  try {
+    const big = BigInt(raw);
+    const usd = Number(big) / 1e8; // utilisé surtout pour l'affichage legacy
     return `$${usd.toLocaleString("en-US", {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     })}`;
-  };
+  } catch {
+    return String(raw);
+  }
+};
 
-  const qualityBpsMap: Record<string, number> = {
-    TB: 8000,
-    TTB: 9000,
-    SUP: 9500,
-    SPL: 9750,
-    FDC: 10000,
+const qualityBpsMap: Record<string, number> = {
+  TB: 8000,
+  TTB: 9000,
+  SUP: 9500,
+  SPL: 9750,
+  FDC: 10000,
+};
+
+const GOLD_TOKEN_MINTED_EVENT = {
+  type: "event",
+  name: "GoldTokenMinted",
+  inputs: [
+    { name: "tokenId", type: "uint256", indexed: true },
+    { name: "to", type: "address", indexed: true },
+    { name: "supabaseId", type: "bytes32", indexed: true },
+    { name: "amount", type: "uint256", indexed: false },
+    { name: "goldPrice", type: "uint256", indexed: false },
+    { name: "quality", type: "uint8", indexed: false },
+    { name: "pieceValue", type: "uint256", indexed: false },
+  ],
+} as const;
+
+const mapContractError = (err: any) => {
+  const msg = String(err?.shortMessage || err?.message || "");
+  const entries: Record<string, string> = {
+    "PatriDeFi: invalid wallet": "Adresse de wallet invalide.",
+    "PatriDeFi: invalid Supabase id": "Supabase ID invalide.",
+    "PatriDeFi: invalid data hash": "Hash des données invalide.",
+    "PatriDeFi: no pieces": "Aucune pièce fournie.",
+    "PatriDeFi: arrays mismatch": "Les tableaux poids/qualité ne correspondent pas.",
+    "PatriDeFi: batch too large": "Nombre total de pièces limité à 100 par opération.",
+    "PatriDeFi: weight too large": "Poids trop élevé pour une pièce.",
+    "PatriDeFi: invalid weight": "Poids de pièce invalide.",
+    "PatriDeFi: invalid quality": "Qualité de pièce invalide.",
+    "PatriDeFi: piece value too high": "Valeur de pièce trop élevée.",
+    "PatriDeFi: piece value too low": "Valeur de pièce trop faible.",
+    "PatriDeFi: not admin": "Seuls les admins peuvent minter.",
+    "EnforcedPause": "Le contrat est en pause.",
   };
+  for (const [needle, friendly] of Object.entries(entries)) {
+    if (msg.includes(needle)) return friendly;
+  }
+  return "Erreur lors de l’envoi de la transaction.";
+};
 
   const formatWeight = (
     pieceValue?: string,
@@ -151,11 +196,15 @@ export const PatriDefiAdmin = () => {
     isPending,
   } = useWriteContract();
 
-  const { isLoading: isConfirming, isSuccess: isConfirmed } =
-    useWaitForTransactionReceipt({
-      hash: txHash,
-      confirmations: 1,
-    });
+  const {
+    data: receipt,
+    error: txError,
+    isLoading: isConfirming,
+    isSuccess: isConfirmed,
+  } = useWaitForTransactionReceipt({
+    hash: txHash,
+    confirmations: 1,
+  });
 
   // Load customers list for admin view
   const fetchCustomers = async () => {
@@ -177,6 +226,55 @@ export const PatriDefiAdmin = () => {
     }
   };
 
+  // Load totalPieceValue on-chain for each customer (lire directement le contrat)
+  useEffect(() => {
+    const loadTotals = async () => {
+      try {
+        if (!customers.length) {
+          setTotalsMap({});
+          return;
+        }
+        const rpcUrl =
+          process.env.NEXT_PUBLIC_HARDHAT_RPC_URL ||
+          process.env.NEXT_PUBLIC_RPC_URL ||
+          process.env.NEXT_PUBLIC_INFURA_API_KEY ||
+          "";
+        if (!rpcUrl || !CONTRACT_ADDRESS) return;
+        const client = createPublicClient({
+          transport: http(rpcUrl),
+        });
+        const abiTotal = [
+          {
+            name: "totalPieceValue",
+            type: "function",
+            stateMutability: "view",
+            inputs: [{ name: "wallet", type: "address" }],
+            outputs: [{ name: "", type: "uint256" }],
+          },
+        ] as const;
+
+        const entries: Record<string, bigint> = {};
+        for (const c of customers) {
+          try {
+            const val = (await client.readContract({
+              address: CONTRACT_ADDRESS as `0x${string}`,
+              abi: abiTotal,
+              functionName: "totalPieceValue",
+              args: [c.wallet as `0x${string}`],
+            })) as bigint;
+            entries[c.wallet.toLowerCase()] = val;
+          } catch {
+            // ignore errors per wallet
+          }
+        }
+        setTotalsMap(entries);
+      } catch (err) {
+        console.error("Failed to load totalPieceValue", err);
+      }
+    };
+    loadTotals();
+  }, [customers]);
+
   // Reset UI after on-chain confirmation
   useEffect(() => {
     if (isConfirmed) {
@@ -191,8 +289,124 @@ export const PatriDefiAdmin = () => {
 
       setNapoleons([{ quantity: 1, weight: 6.45, quality: "" }]);
       fetchCustomers();
+      // auto-hide success after timeout
+      const t = setTimeout(() => setSuccess(null), SUCCESS_TIMEOUT_MS);
+      return () => clearTimeout(t);
     }
-  }, [isConfirmed]);
+  }, [isConfirmed, receipt]);
+
+  // Track tx errors / reverted status
+  useEffect(() => {
+    if (txError) {
+      setError(mapContractError(txError));
+      setSuccess(null);
+    } else if (receipt && (receipt as any).status === "reverted") {
+      setError("La transaction a échoué (reverted).");
+      setSuccess(null);
+    }
+  }, [txError, receipt]);
+
+  // After confirmation: compute total minted value and push into payload (initialPrice)
+  useEffect(() => {
+    const pushInitialPrice = async () => {
+      if (!isConfirmed || !receipt || !lastWalletForTokens) return;
+      if (!pendingNapoleons.length) return;
+      if (!PATRI_D_NFT_ADDRESS) return;
+
+      try {
+        const mintedPieceValues: bigint[] = [];
+        let decodedGoldPrice: bigint | null = null;
+
+        for (const log of receipt.logs || []) {
+          if (
+            log.address?.toLowerCase() !==
+            (PATRI_D_NFT_ADDRESS as string).toLowerCase()
+          ) {
+            continue;
+          }
+          try {
+            const decoded = decodeEventLog({
+              abi: [GOLD_TOKEN_MINTED_EVENT],
+              data: log.data as `0x${string}`,
+              topics: [...(log.topics || [])] as [`0x${string}`, ...`0x${string}`[]],
+            });
+            if (decoded.eventName === "GoldTokenMinted") {
+              const args: any = decoded.args;
+              const pieceValue = BigInt(args.pieceValue ?? 0);
+              const amount = BigInt(args.amount ?? 1);
+              mintedPieceValues.push(pieceValue * amount); // amount=1 en pratique
+              if (decodedGoldPrice === null && args.goldPrice !== undefined) {
+                decodedGoldPrice = BigInt(args.goldPrice);
+              }
+            }
+          } catch {
+            // ignore decoding errors
+          }
+        }
+
+        // Répartition des valeurs par lot (ordre des pièces = ordre des saisies).
+        // Si on n'a pas de logs complets, on recalcule côté front avec goldPrice décodé.
+        const perLotRaw: bigint[] = [];
+        if (mintedPieceValues.length >= pendingNapoleons.reduce((acc, n) => acc + (Number(n.quantity) || 0), 0)) {
+          let cursor = 0;
+          for (const n of pendingNapoleons) {
+            const qty = Number(n.quantity) || 0;
+            let sum = BigInt(0);
+            for (let i = 0; i < qty && cursor < mintedPieceValues.length; i++) {
+              sum += mintedPieceValues[cursor];
+              cursor += 1;
+            }
+            perLotRaw.push(sum);
+          }
+        } else if (decodedGoldPrice !== null) {
+          for (const n of pendingNapoleons) {
+            const qty = BigInt(Number(n.quantity) || 0);
+            const wMg = BigInt(Math.round((n.weight || 0) * 1000));
+            const bps = BigInt(qualityBpsMap[n.quality] ?? qualityBpsMap["TB"]);
+            const pieceVal = (decodedGoldPrice * wMg * bps) / (10000n * BigInt(MG_PER_OUNCE));
+            perLotRaw.push(pieceVal * qty);
+          }
+        }
+
+        const totalValueRaw =
+          perLotRaw.length > 0
+            ? perLotRaw.reduce((acc, v) => acc + v, BigInt(0))
+            : mintedPieceValues.reduce((acc, v) => acc + v, BigInt(0));
+
+        // Arrondi au centime directement en entier (évite les flottants)
+        const toDollars = (raw: bigint | undefined) => {
+          if (raw === undefined) return undefined;
+          const cents = (raw * 100n + 50_000_000n) / 100_000_000n; // arrondi
+          return Number(cents) / 100;
+        };
+
+        await fetch(`/api/customers/${lastWalletForTokens}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            napoleons: pendingNapoleons.map((n, idx) => ({
+              ...n,
+              initialPrice:
+                perLotRaw[idx] !== undefined
+                  ? toDollars(perLotRaw[idx])
+                  : undefined,
+            })),
+            initialPrice:
+              totalValueRaw === BigInt(0)
+                ? undefined
+                : toDollars(totalValueRaw),
+          }),
+        });
+        fetchCustomers();
+        setPendingNapoleons([]);
+      } catch (err) {
+        console.error("Sync initial price to Supabase failed", err);
+      }
+    };
+    pushInitialPrice();
+  }, [isConfirmed, receipt, lastWalletForTokens, pendingNapoleons, napoleons, fetchCustomers, GOLD_TOKEN_MINTED_EVENT]);
 
   useEffect(() => {
     fetchCustomers();
@@ -254,6 +468,10 @@ export const PatriDefiAdmin = () => {
         throw new Error("En mode tokenId, renseigne un nombre (ex: 1).");
       }
       const res = await fetch(`/api/metadata/${value}`);
+      if (res.status === 404) {
+        setSearchResult(null);
+        throw new Error("Token introuvable.");
+      }
       if (!res.ok) throw new Error("Impossible de récupérer la métadonnée");
       const meta = await res.json();
 
@@ -332,6 +550,12 @@ export const PatriDefiAdmin = () => {
       napoleons,
     };
 
+    // Empêche d'enregistrer le wallet admin comme client
+    if (connectedAddress && normalizedWallet === connectedAddress.toLowerCase()) {
+      setError("Le wallet administrateur ne peut pas être enregistré comme client.");
+      return;
+    }
+
     let supabaseUUID: string;
     try {
       const response = await fetch("/api/customers", {
@@ -369,12 +593,40 @@ export const PatriDefiAdmin = () => {
       FDC: 4,
     };
 
+    // Guard against insane quantities
+    let totalPieces = 0;
+    for (const n of napoleons) {
+      const qty = Number(n.quantity) || 0;
+      if (qty <= 0) {
+        setError("Chaque lot doit avoir une quantité supérieure à 0.");
+        return;
+      }
+      if (qty > 100) {
+        setError("Quantité par lot limitée à 100 pièces.");
+        return;
+      }
+      totalPieces += qty;
+    }
+    if (totalPieces > 100) {
+      setError("Nombre total de pièces limité à 100 par opération.");
+      return;
+    }
+
     const weightsMg: bigint[] = [];
     const qualitiesArr: number[] = [];
     for (const n of napoleons) {
       const q = qualityMap[n.quality] ?? 0; // défaut: TB
       const wMg = BigInt(Math.round((n.weight || 0) * 1000)); // grammes -> mg
-      for (let i = 0; i < (n.quantity || 0); i++) {
+      const qty = Number(n.quantity) || 0;
+      if (wMg <= 0) {
+        setError("Le poids de chaque pièce doit être supérieur à 0.");
+        return;
+      }
+      if (Number(n.weight) > 1000) {
+        setError("Poids maximum par pièce: 1000 g.");
+        return;
+      }
+      for (let i = 0; i < qty; i++) {
         weightsMg.push(wMg);
         qualitiesArr.push(q);
       }
@@ -400,7 +652,9 @@ export const PatriDefiAdmin = () => {
     const recipient = normalizedWallet as `0x${string}`;
 
     try {
-      writeContract({
+      setLastWalletForTokens(normalizedWallet);
+      setPendingNapoleons(napoleons.map((n) => ({ ...n })));
+      await writeContract({
         abi: CONTRACT_ABI,
         address: targetContract,
         functionName: "registerCustomerAndMintDetailed",
@@ -414,33 +668,37 @@ export const PatriDefiAdmin = () => {
       });
     } catch (err: any) {
       console.error(err);
-      setError("Erreur lors de l’envoi de la transaction.");
+      const friendly = mapContractError(err);
+      // Cas fréquent : client déjà enregistré / require côté contrat
+      if (friendly.includes("déjà") || friendly.includes("existe") || friendly === "Erreur lors de l’envoi de la transaction.") {
+        setError("Ce client existe déjà on-chain : la base Supabase a été mise à jour mais aucun nouveau mint n’a été réalisé.");
+      } else {
+        setError(friendly);
+      }
       return;
     }
   };
 
   const isSubmitting = isPending || isConfirming;
 
-  if (!isAdmin)
+  // --------------------------
+  // RENDER COMPONENT UI
+  // --------------------------
+
+  if (!isAdmin) {
     return (
       <div className="text-center text-red-600 font-semibold mt-12">
         Accès réservé à l'administrateur PatriDeFi.
       </div>
     );
-
-  // --------------------------
-  // RENDER COMPONENT UI
-  // --------------------------
+  }
 
   return (
     <div className="absolute left-1/2 top-16 -translate-x-1/2 flex w-full max-w-3xl flex-col gap-4 rounded-2xl border border-neutral-800 bg-neutral-900/80 p-5 shadow-xl backdrop-blur md:top-20">
 
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="space-y-1">
-          <h1 className="text-2xl font-semibold">
-            Administration PatriDeFi
-          </h1>
-
+          <h1 className="text-2xl font-semibold">Administration PatriDeFi</h1>
         </div>
 
         <div className="inline-flex gap-1 rounded-lg border bg-muted/30 p-1">
@@ -470,7 +728,8 @@ export const PatriDefiAdmin = () => {
           </Button>
         </div>
       </div>
-            <div className="h-px w-full bg-border" />
+
+      <div className="h-px w-full bg-border" />
       {activeTab === "encode" && (
         <>
           <div className="space-y-2">
@@ -623,13 +882,6 @@ export const PatriDefiAdmin = () => {
               </Alert>
             )}
 
-            {/* SUCCESS */}
-            {success && (
-              <Alert>
-                <AlertDescription>{success}</AlertDescription>
-              </Alert>
-            )}
-
             {/* SUBMIT */}
             <Button
               type="submit"
@@ -641,11 +893,16 @@ export const PatriDefiAdmin = () => {
                 : "Enregistrer le client et minter les NFTs"}
             </Button>
 
-            {/* TX HASH */}
-            {txHash && (
-              <p className="mt-2 text-xs break-all text-muted-foreground">
-                Hash de transaction : {txHash}
-              </p>
+            {/* SUCCESS + TX HASH (bas) */}
+            {success && txHash && isConfirmed && (
+              <Alert className="border-green-500/60 bg-green-500/10 text-green-100">
+                <AlertDescription className="flex flex-col gap-2">
+                  {success || "Client enregistré et NFT minté avec succès."}
+                  <span className="font-mono text-xs break-all">
+                    Hash de transaction : {txHash}
+                  </span>
+                </AlertDescription>
+              </Alert>
             )}
           </form>
         </>
@@ -680,6 +937,17 @@ export const PatriDefiAdmin = () => {
               {customers.map((c) => {
                 const napos = c.payload?.napoleons || [];
                 const totalCoins = napos.reduce((acc, n) => acc + (n.quantity || 0), 0);
+                const onChain = totalsMap[c.wallet.toLowerCase()];
+                const sumPrice =
+                  onChain !== undefined && onChain > 0n
+                    ? onChain
+                    : napos
+                        .map((n) =>
+                          n.initialPrice !== undefined
+                            ? BigInt(Math.round((n.initialPrice as number) * 1e8))
+                            : BigInt(0)
+                        )
+                        .reduce((acc, v) => acc + v, BigInt(0));
                 return (
                 <div
                   key={c.id}
@@ -695,6 +963,10 @@ export const PatriDefiAdmin = () => {
                         </p>
                         <p className="text-xs text-muted-foreground break-words">
                           Adresse postale : {c.homeaddress}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Valeur totale client :{" "}
+                          {sumPrice > 0n ? formatUsd(sumPrice) : "-"}
                         </p>
                       </div>
                       <div className="text-xs text-muted-foreground text-right">
@@ -720,11 +992,19 @@ export const PatriDefiAdmin = () => {
                             <div className="text-xs text-muted-foreground">
                               Poids unitaire&nbsp;: {n.weight} g
                             </div>
+                            <div className="text-xs text-muted-foreground">
+                              Prix total lot&nbsp;:{" "}
+                              {n.initialPrice !== undefined
+                                ? formatUsd(
+                                    BigInt(Math.round((n.initialPrice as number) * 1e8))
+                                  )
+                                : "-"}
+                            </div>
                           </div>
                         ))}
                           </div>
                         )}
-                  </div>
+                 </div>
                 );
               })}
             </div>
@@ -764,7 +1044,7 @@ export const PatriDefiAdmin = () => {
             </Alert>
           )}
 
-          {searchResult && (
+          {searchResult ? (
             <div className="rounded-lg border border-neutral-800 bg-neutral-900/70 p-3 flex flex-col gap-3 md:flex-row md:items-start">
               {searchResult.image && (
                 <img
@@ -816,6 +1096,12 @@ export const PatriDefiAdmin = () => {
                 )}
               </div>
             </div>
+          ) : (
+            <Alert variant="default">
+              <AlertDescription>
+                Entrez un token ID existant pour afficher ses informations. Aucune donnée trouvée.
+              </AlertDescription>
+            </Alert>
           )}
 
         </div>

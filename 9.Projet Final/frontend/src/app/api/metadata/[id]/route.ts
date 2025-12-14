@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createPublicClient, http } from "viem";
-import { hardhat } from "viem/chains";
+import { hardhat, sepolia } from "viem/chains";
 
 // Minimal ABI just for goldTokens()
 const PATRI_D_NFT_ABI = [
@@ -45,7 +45,11 @@ export async function GET(
     ],
   };
 
-  const rpcUrl = process.env.HARDHAT_RPC_URL || "http://localhost:8545";
+  const rpcUrl =
+    process.env.HARDHAT_RPC_URL || // local/dev
+    process.env.NEXT_PUBLIC_INFURA_API_KEY || // full URL possible
+    "http://localhost:8545";
+
   const patriDAddress = process.env.NEXT_PUBLIC_PATRI_D_NFT_ADDRESS as
     | `0x${string}`
     | undefined;
@@ -55,8 +59,9 @@ export async function GET(
   }
 
   try {
+    const chain = process.env.NODE_ENV === "production" ? sepolia : hardhat;
     const client = createPublicClient({
-      chain: hardhat,
+      chain,
       transport: http(rpcUrl),
     });
 
@@ -73,6 +78,19 @@ export async function GET(
         number,
         bigint,
       ];
+
+    // If no data (all zeros), consider token not found
+    const isEmpty =
+      supabaseId === "0x0000000000000000000000000000000000000000000000000000000000000000" &&
+      amount === BigInt(0) &&
+      goldPrice === BigInt(0) &&
+      pieceValue === BigInt(0);
+    if (isEmpty) {
+      return NextResponse.json(
+        { error: "Token introuvable" },
+        { status: 404 }
+      );
+    }
 
     const meta = {
       ...metadataBase,
@@ -91,7 +109,10 @@ export async function GET(
 
     return NextResponse.json(meta);
   } catch (error) {
-    // If anything fails (no RPC, bad id, etc.), fall back to base metadata.
-    return NextResponse.json(metadataBase);
+    // If anything fails (no RPC, bad id, etc.), return 404
+    return NextResponse.json(
+      { error: "Token introuvable" },
+      { status: 404 }
+    );
   }
 }

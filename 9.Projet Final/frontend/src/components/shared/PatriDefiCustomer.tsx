@@ -1,16 +1,26 @@
 'use client';
 import { useEffect, useMemo, useState } from "react";
-import { useAccount } from "wagmi";
+import { useAccount, useReadContract } from "wagmi";
 import { Alert, AlertDescription } from "../ui/alert";
 
 type Napoleon = {
   quantity: number;
   weight: number;
   quality: string;
+  initialPrice?: number;
+  pieceValue?: number; // legacy
+  goldPrice?: number;  // legacy
 };
 
 type Payload = {
   napoleons?: Napoleon[];
+  tokens?: Array<{
+    tokenId: string;
+    pieceValue?: string;
+    goldPrice?: string;
+    quality?: string;
+    amount?: string;
+  }>;
 };
 
 type CustomerRow = {
@@ -24,6 +34,21 @@ type CustomerRow = {
 
 const PatriDefiCustomer = () => {
   const { address, isConnected } = useAccount();
+  const { data: totalOnChain } = useReadContract({
+    abi: [
+      {
+        name: "totalPieceValue",
+        type: "function",
+        stateMutability: "view",
+        inputs: [{ name: "wallet", type: "address" }],
+        outputs: [{ name: "", type: "uint256" }],
+      },
+    ],
+    address: process.env.NEXT_PUBLIC_PATRI_DEFI_ADDRESS as `0x${string}` | undefined,
+    functionName: "totalPieceValue",
+    args: address ? [address as `0x${string}`] : undefined,
+    query: { enabled: Boolean(address && process.env.NEXT_PUBLIC_PATRI_DEFI_ADDRESS) },
+  });
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,6 +56,38 @@ const PatriDefiCustomer = () => {
   const [row, setRow] = useState<CustomerRow | null>(null);
 
   const napoleons = useMemo(() => row?.payload?.napoleons || [], [row]);
+  const tokens = useMemo(() => row?.payload?.tokens || [], [row]);
+
+  const formatUsd = (raw?: string | number | bigint) => {
+    if (raw === undefined || raw === null) return null;
+    try {
+      const big = BigInt(raw);
+      const usd = Number(big) / 1e8; // valeurs en 1e8 (feed / pieceValue)
+      return `$${usd.toLocaleString("fr-FR", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })}`;
+    } catch {
+      return String(raw);
+    }
+  };
+
+  const qualityLabel = (q: string) => {
+    switch (q) {
+      case "TB":
+        return "TB (Très Bon)";
+      case "TTB":
+        return "TTB (Très Très Beau)";
+      case "SUP":
+        return "SUP (Superbe)";
+      case "SPL":
+        return "SPL (Splendide)";
+      case "FDC":
+        return "FDC (Fleur de Coin)";
+      default:
+        return q || "-";
+    }
+  };
 
   // Fetch data for connected wallet
   useEffect(() => {
@@ -45,7 +102,9 @@ const PatriDefiCustomer = () => {
         if (!res.ok) {
           if (res.status === 404) {
             setUnauthorized(true);
-            throw new Error("Ce wallet n'est pas enregistré chez PatriDeFi.");
+            setRow(null);
+            setError(null); // pas d'overlay pour un 404 attendu
+            return;
           }
           throw new Error(data?.error || "Impossible de récupérer vos données.");
         }
@@ -126,35 +185,95 @@ const PatriDefiCustomer = () => {
 
           <div className="mt-4">
             <h3 className="text-base font-semibold">Napoléons enregistrés</h3>
-            {napoleons.length === 0 ? (
+            {totalOnChain !== undefined && (
+              <p className="text-sm text-muted-foreground mb-1">
+                Valeur totale on-chain (tous lots) :{" "}
+                <span className="font-medium">
+                  {formatUsd(totalOnChain) ?? "-"}
+                </span>
+              </p>
+            )}
+            {tokens.length === 0 && napoleons.length === 0 ? (
               <p className="text-sm text-muted-foreground">
                 Aucun napoléon encodé pour l’instant.
               </p>
             ) : (
               <div className="mt-2 space-y-2">
-                {napoleons.map((n, idx) => (
+                {tokens.map((t, idx) => (
                   <div
-                    key={`${n.quality}-${idx}`}
-                    className="grid grid-cols-1 gap-2 rounded-lg border bg-background p-3 md:grid-cols-4"
+                    key={`${t.tokenId}-${idx}`}
+                    className="grid grid-cols-1 gap-2 rounded-lg border bg-background p-3 md:grid-cols-5"
                   >
                     <div>
-                      <p className="text-xs text-muted-foreground">Quantité</p>
-                      <p className="font-medium">{n.quantity}</p>
+                      <p className="text-xs text-muted-foreground">Token ID</p>
+                      <p className="font-medium">#{t.tokenId}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-muted-foreground">Poids (g)</p>
-                      <p className="font-medium">{n.weight}</p>
+                      <p className="text-xs text-muted-foreground">Quantité</p>
+                      <p className="font-medium">{t.amount ?? "1"}</p>
                     </div>
                     <div>
                       <p className="text-xs text-muted-foreground">Qualité</p>
-                      <p className="font-medium">{n.quality}</p>
+                      <p className="font-medium">
+                        {qualityLabel(t.quality || "")}
+                      </p>
                     </div>
                     <div>
-                      <p className="text-xs text-muted-foreground">Index</p>
-                      <p className="font-medium">#{idx + 1}</p>
+                      <p className="text-xs text-muted-foreground">Prix initial (lot)</p>
+                      <p className="font-medium">
+                        {t.pieceValue && t.amount
+                          ? formatUsd(
+                              (BigInt(t.pieceValue) || BigInt(0)) *
+                                (BigInt(t.amount) || BigInt(1))
+                            )
+                          : "-"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Prix feed</p>
+                      <p className="font-medium">
+                        {t.goldPrice ? formatUsd(t.goldPrice) : "-"}
+                      </p>
                     </div>
                   </div>
                 ))}
+
+                {/* Fallback affichage legacy si pas de tokens */}
+                {tokens.length === 0 &&
+                  napoleons.map((n, idx) => (
+                    <div
+                      key={`${n.quality}-${idx}`}
+                      className="grid grid-cols-1 gap-2 rounded-lg border bg-background p-3 md:grid-cols-4"
+                    >
+                      <div>
+                        <p className="text-xs text-muted-foreground">Quantité</p>
+                        <p className="font-medium">{n.quantity}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Poids (g)</p>
+                        <p className="font-medium">{n.weight}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Qualité</p>
+                        <p className="font-medium">{qualityLabel(n.quality)}</p>
+                      </div>
+                      <div>
+                      <p className="text-xs text-muted-foreground">Prix initial (lot)</p>
+                      <p className="font-medium">
+                        {n.initialPrice !== undefined
+                          ? formatUsd(
+                              BigInt(Math.round((n.initialPrice as number) * 1e8))
+                            )
+                          : n.pieceValue !== undefined
+                          ? formatUsd(
+                              BigInt(Math.round((n.pieceValue as number) * 1e8)) *
+                                BigInt(n.quantity || 1)
+                            )
+                          : "-"}
+                      </p>
+                      </div>
+                    </div>
+                  ))}
               </div>
             )}
           </div>

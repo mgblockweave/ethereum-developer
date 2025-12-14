@@ -26,3 +26,4 @@ Thumbs.db
 .env.*.local
 .env.test.local
 .github/copilot-instructions.md
+9.Projet Final/backend/frontend/.env.local.hardhat

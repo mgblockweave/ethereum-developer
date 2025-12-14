@@ -2,6 +2,13 @@ import { network } from "hardhat";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import dotenv from "dotenv";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// Load backend/.env.local first, then fallback to .env
+dotenv.config({ path: path.join(__dirname, "../.env.local") });
+dotenv.config({ path: path.join(__dirname, "../.env") });
 
 const DEMO_MINT = false;
 
@@ -13,15 +20,14 @@ async function main() {
     chainId === 31337n ||
     name.toLowerCase().includes("hardhat") ||
     name.toLowerCase().includes("localhost");
-  console.log("Deploying with:", deployer.address);
+  console.log("Deploying with (owner):", deployer.address);
   console.log("Network:", name, "chainId:", chainId.toString());
 
-  // Base URI: use env override, otherwise local API in dev, placeholder in prod
-  const baseUri =
-    process.env.BASE_URI ??
-    (isLocal
-      ? "http://localhost:3000/api/metadata/"
-      : "https://patridefi.vercel.app/metadata/");
+  // Base URI: must be provided via BASE_URI env variable
+  if (!process.env.BASE_URI) {
+    throw new Error("Missing BASE_URI. Set BASE_URI (e.g. https://patridefi.vercel.app/api/metadata/).");
+  }
+  const baseUri = process.env.BASE_URI;
 
   // Deploy mock price feed (gold price per ounce, 8 decimals). Example: 2000 USD = 2000 * 1e8
   const MockGoldPriceFeed = await ethers.getContractFactory("MockGoldPriceFeed");
@@ -49,7 +55,7 @@ async function main() {
   await tx.wait();
   console.log("NftPatriD minter set to PatriDeFi");
 
-  // Ensure URI points to the local metadata API
+  // Ensure URI points to the desired metadata endpoint
   const baseTx = await nftPatriD.setBaseURI(baseUri);
   await baseTx.wait();
   console.log("NftPatriD base URI set to:", baseUri);
@@ -58,7 +64,7 @@ async function main() {
   if (demoMintEnabled) {
     const supabaseId = ethers.keccak256(ethers.toUtf8Bytes("demo-customer"));
     const dataHash = ethers.keccak256(ethers.toUtf8Bytes("demo-payload"));
-    const weightsMg = [31_000]; // ~1 Napoléon (mg)
+    const weightsMg = [31_000]; // ~1 Napoleon (mg)
     const qualities = [0]; // Quality.TB
     const mintTx = await patriDeFi.registerCustomerAndMintDetailed(
       deployer.address,
@@ -74,15 +80,15 @@ async function main() {
 
   // Propagate addresses to frontend/ponder env files when running locally
   if (isLocal) {
-    upsertEnv("../frontend/.env.local", {
+    upsertEnv("../../frontend/.env.local", {
       NEXT_PUBLIC_PATRI_D_NFT_ADDRESS: nftPatriDAddress,
       NEXT_PUBLIC_PATRI_DEFI_ADDRESS: patriDeFiAddress,
     });
-    upsertEnv("../frontend/.env.local.hardhat", {
+    upsertEnv("../../frontend/.env.local.hardhat", {
       NEXT_PUBLIC_PATRI_D_NFT_ADDRESS: nftPatriDAddress,
       NEXT_PUBLIC_PATRI_DEFI_ADDRESS: patriDeFiAddress,
     });
-    upsertEnv("../ponder/.env.local", {
+    upsertEnv("../../ponder/.env.local", {
       NEXT_PUBLIC_PATRI_D_NFT_ADDRESS: nftPatriDAddress,
       NEXT_PUBLIC_PATRI_DEFI_ADDRESS: patriDeFiAddress,
     });

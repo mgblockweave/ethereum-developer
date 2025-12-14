@@ -5,6 +5,7 @@ type Napoleon = {
   quantity: number;
   weight: number;
   quality: string;
+  initialPrice?: number;
 };
 
 type Payload = {
@@ -12,18 +13,18 @@ type Payload = {
   [key: string]: unknown;
 };
 
+
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ wallet: string }> }
 ) {
-  const { wallet: walletFromParams } = await params;
-  const walletInput =
-    walletFromParams ||
-    req.nextUrl.searchParams.get("wallet") ||
-    ""; // fallback if Next params is unexpectedly empty
-  const wallet = walletInput.toLowerCase();
+  const awaited = await params;
+  const fromParams = awaited?.wallet;
+  const fromQuery = req.nextUrl.searchParams.get("wallet");
+  const fromPath = req.nextUrl.pathname.split("/").pop();
+  const wallet = (fromParams || fromQuery || fromPath || "").toLowerCase().trim();
 
-  if (!wallet || typeof wallet !== "string") {
+  if (!wallet) {
     return NextResponse.json(
       { error: "Wallet manquant dans l'URL." },
       { status: 400 }
@@ -33,7 +34,7 @@ export async function GET(
   const { data, error } = await supabaseServer
     .from("customers")
     .select("id,wallet,firstname,lastname,homeaddress,payload")
-    .eq("wallet", wallet)
+    .ilike("wallet", wallet)
     .single();
 
   if (error) {
@@ -54,14 +55,13 @@ export async function PUT(
   req: NextRequest,
   { params }: { params: Promise<{ wallet: string }> }
 ) {
-  const { wallet: walletFromParams } = await params;
-  const walletInput =
-    walletFromParams ||
-    req.nextUrl.searchParams.get("wallet") ||
-    ""; // fallback if Next params is unexpectedly empty
-  const wallet = walletInput.toLowerCase();
+  const awaited = await params;
+  const fromParams = awaited?.wallet;
+  const fromQuery = req.nextUrl.searchParams.get("wallet");
+  const fromPath = req.nextUrl.pathname.split("/").pop();
+  const wallet = (fromParams || fromQuery || fromPath || "").toLowerCase().trim();
 
-  if (!wallet || typeof wallet !== "string") {
+  if (!wallet) {
     return NextResponse.json(
       { error: "Wallet manquant dans l'URL." },
       { status: 400 }
@@ -79,11 +79,18 @@ export async function PUT(
     );
   }
 
-  const sanitizedNapoleons = incomingNapoleons.map((n) => ({
-    quantity: Number(n.quantity),
-    weight: Number(n.weight) || 0,
-    quality: n.quality ?? "",
-  }));
+  const sanitizeList = (list: Napoleon[]) =>
+    list.map((n) => ({
+      quantity: Number(n.quantity),
+      weight: Number(n.weight) || 0,
+      quality: n.quality ?? "",
+      initialPrice:
+        n.initialPrice !== undefined && !Number.isNaN(Number(n.initialPrice))
+          ? Number(n.initialPrice)
+          : undefined,
+    }));
+
+  const sanitizedNapoleons = sanitizeList(incomingNapoleons);
 
   const hasInvalidQuantity = sanitizedNapoleons.some(
     (n) => Number(n.quantity) < 1 || Number.isNaN(Number(n.quantity))
@@ -98,8 +105,8 @@ export async function PUT(
   // Récupère l'existant pour fusionner proprement
   const { data: existing, error: fetchError } = await supabaseServer
     .from("customers")
-    .select("id,payload,firstname,lastname,homeaddress")
-    .eq("wallet", wallet)
+    .select("id,payload,firstname,lastname,homeaddress,wallet")
+    .ilike("wallet", wallet)
     .single();
 
   if (fetchError) {
@@ -114,11 +121,22 @@ export async function PUT(
   }
 
   const currentPayload: Payload = (existing?.payload as Payload) || {};
+  const existingNapoleonsRaw = Array.isArray(currentPayload.napoleons)
+    ? (currentPayload.napoleons as Napoleon[])
+    : [];
+  const existingNapoleons = sanitizeList(existingNapoleonsRaw);
+
+  // Remplace par les lots fournis (évite les doublons)
+  const mergedNapoleons = sanitizedNapoleons.length
+    ? sanitizedNapoleons
+    : existingNapoleons;
 
   const updatedPayload: Payload = {
     ...currentPayload,
-    napoleons: sanitizedNapoleons,
+    napoleons: mergedNapoleons,
   };
+  // Supprime toute trace de tokens dans l'ancien payload
+  delete (updatedPayload as any).tokens;
 
   const { data, error: updateError } = await supabaseServer
     .from("customers")
@@ -127,8 +145,9 @@ export async function PUT(
       lastname: incomingCustomer?.lastName ?? existing?.lastname,
       homeaddress: incomingCustomer?.homeAddress ?? existing?.homeaddress,
       payload: updatedPayload,
+      wallet, // force stockage en minuscule pour normaliser
     })
-    .eq("wallet", wallet)
+    .ilike("wallet", wallet)
     .select("id,wallet,firstname,lastname,homeaddress,payload")
     .single();
 

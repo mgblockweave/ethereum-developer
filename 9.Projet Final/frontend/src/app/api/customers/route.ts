@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
-
 type CustomerForm = {
   firstName: string;
   lastName: string;
@@ -37,8 +36,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { customer, napoleons }: { customer?: CustomerForm; napoleons?: Napoleon[] } =
-    await req.json();
+  const { customer, napoleons }: { customer?: CustomerForm; napoleons?: Napoleon[] } = await req.json();
 
   if (!customer || !napoleons) {
     return NextResponse.json(
@@ -134,10 +132,10 @@ export async function POST(req: NextRequest) {
       firstname: customer.firstName,
       lastname: customer.lastName,
       homeaddress: customer.homeAddress,
-      payload: {
-        napoleons: sanitizedNapoleons,
-      },
-    })
+        payload: {
+          napoleons: sanitizedNapoleons,
+        },
+      })
     .select("id,wallet,firstname,lastname,homeaddress,payload")
     .single();
 
