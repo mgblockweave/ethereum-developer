@@ -1,13 +1,13 @@
 name: CI
 
 on:
-  push:
-    branches: [main, master]
   pull_request:
-    branches: ["*"]
+  push:
+    branches: [ master ]
 
 jobs:
-  backend-tests:
+  backend:
+    name: Backend tests (Hardhat)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -21,14 +21,33 @@ jobs:
         with:
           node-version: 20
           cache: "npm"
-          cache-dependency-path: |
-            "9.Projet Final/backend/package-lock.json"
+          cache-dependency-path: "9.Projet Final/backend/package-lock.json"
 
       - name: Install deps
         run: npm ci
 
-      - name: Compile
-        run: npx hardhat compile
-
-      - name: Test
+      - name: Run tests
         run: npx hardhat test
+
+  frontend:
+    name: Frontend lint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: "9.Projet Final/frontend"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+          cache-dependency-path: "9.Projet Final/frontend/package-lock.json"
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
