@@ -166,3 +166,4 @@ export async function GET() {
 
   return NextResponse.json({ rows: data as SupabaseRow[] });
 }
+/* eslint-disable @typescript-eslint/no-unused-vars */

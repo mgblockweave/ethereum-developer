@@ -161,3 +161,4 @@ export async function PUT(
 
   return NextResponse.json({ row: data });
 }
+/* eslint-disable @typescript-eslint/no-explicit-any */

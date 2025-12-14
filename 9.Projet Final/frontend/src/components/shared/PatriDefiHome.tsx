@@ -29,3 +29,4 @@ export default function PatriDefiHome() {
     </div>
   );
 }
+/* eslint-disable @typescript-eslint/no-explicit-any */

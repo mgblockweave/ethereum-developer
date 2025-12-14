@@ -291,3 +291,4 @@ const PatriDefiCustomer = () => {
 };
 
 export default PatriDefiCustomer;
+/* eslint-disable @typescript-eslint/no-explicit-any, react/no-unescaped-entities */

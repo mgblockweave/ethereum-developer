@@ -1110,3 +1110,4 @@ const mapContractError = (err: any) => {
     </div>
   );
 };
+/* eslint-disable @typescript-eslint/no-explicit-any, react-hooks/exhaustive-deps, react/no-unescaped-entities, @next/next/no-img-element */
