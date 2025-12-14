@@ -109,6 +109,7 @@ const qualityBpsMap: Record<string, number> = {
   SPL: 9750,
   FDC: 10000,
 };
+const MG_PER_OUNCE = 31103; // 31.103 g exprimés en mg, aligné sur le contrat
 
 const GOLD_TOKEN_MINTED_EVENT = {
   type: "event",
