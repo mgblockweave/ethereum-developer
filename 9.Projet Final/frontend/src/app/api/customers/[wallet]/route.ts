@@ -136,7 +136,7 @@ export async function PUT(
     napoleons: mergedNapoleons,
   };
   // Supprime toute trace de tokens dans l'ancien payload
-  delete (updatedPayload as any).tokens;
+  delete (updatedPayload as Record<string, unknown>)["tokens"];
 
   const { data, error: updateError } = await supabaseServer
     .from("customers")
@@ -161,4 +161,3 @@ export async function PUT(
 
   return NextResponse.json({ row: data });
 }
-/* eslint-disable @typescript-eslint/no-explicit-any */

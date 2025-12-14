@@ -108,7 +108,7 @@ export async function GET(
     };
 
     return NextResponse.json(meta);
-  } catch (error) {
+  } catch {
     // If anything fails (no RPC, bad id, etc.), return 404
     return NextResponse.json(
       { error: "Token introuvable" },
@@ -116,4 +116,3 @@ export async function GET(
     );
   }
 }
-/* eslint-disable @typescript-eslint/no-unused-vars */

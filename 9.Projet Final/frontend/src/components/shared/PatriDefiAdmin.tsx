@@ -1,14 +1,15 @@
 "use client";
 
-import { useState, useEffect, FormEvent } from "react";
+import { useState, useEffect, FormEvent, useCallback } from "react";
 import {
   useAccount,
   useWriteContract,
   useWaitForTransactionReceipt,
 } from "wagmi";
 
-import { keccak256, stringToBytes, decodeEventLog, createPublicClient, http } from "viem";
+import { keccak256, stringToBytes, decodeEventLog, createPublicClient, http, type Abi } from "viem";
 
+import Image from "next/image";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
@@ -16,6 +17,30 @@ import { Alert, AlertDescription } from "../ui/alert";
 
 import { CONTRACT_ABI, CONTRACT_ADDRESS, PATRI_D_NFT_ADDRESS } from "@/utils/constants";
 import { useReadContract } from "wagmi";
+
+const QUALITY_BPS_MAP: Record<string, number> = {
+  TB: 8000,
+  TTB: 9000,
+  SUP: 9500,
+  SPL: 9750,
+  FDC: 10000,
+};
+
+const MG_PER_OUNCE = 31103; // 31.103 g exprimés en mg
+
+const GOLD_TOKEN_MINTED_EVENT = {
+  type: "event",
+  name: "GoldTokenMinted",
+  inputs: [
+    { name: "tokenId", type: "uint256", indexed: true },
+    { name: "to", type: "address", indexed: true },
+    { name: "supabaseId", type: "bytes32", indexed: true },
+    { name: "goldPrice", type: "uint256", indexed: false },
+    { name: "quality", type: "uint8", indexed: false },
+    { name: "pieceValue", type: "uint256", indexed: false },
+    { name: "amount", type: "uint256", indexed: false },
+  ],
+} as const satisfies Abi[number];
 
 type CustomerForm = {
   firstName: string;
@@ -102,31 +127,8 @@ const formatUsd = (raw?: string | number | bigint) => {
   }
 };
 
-const qualityBpsMap: Record<string, number> = {
-  TB: 8000,
-  TTB: 9000,
-  SUP: 9500,
-  SPL: 9750,
-  FDC: 10000,
-};
-const MG_PER_OUNCE = 31103; // 31.103 g exprimés en mg, aligné sur le contrat
-
-const GOLD_TOKEN_MINTED_EVENT = {
-  type: "event",
-  name: "GoldTokenMinted",
-  inputs: [
-    { name: "tokenId", type: "uint256", indexed: true },
-    { name: "to", type: "address", indexed: true },
-    { name: "supabaseId", type: "bytes32", indexed: true },
-    { name: "amount", type: "uint256", indexed: false },
-    { name: "goldPrice", type: "uint256", indexed: false },
-    { name: "quality", type: "uint8", indexed: false },
-    { name: "pieceValue", type: "uint256", indexed: false },
-  ],
-} as const;
-
-const mapContractError = (err: any) => {
-  const msg = String(err?.shortMessage || err?.message || "");
+const mapContractError = (err: unknown) => {
+  const msg = String((err as { shortMessage?: string; message?: string })?.shortMessage || (err as { message?: string })?.message || "");
   const entries: Record<string, string> = {
     "PatriDeFi: invalid wallet": "Adresse de wallet invalide.",
     "PatriDeFi: invalid Supabase id": "Supabase ID invalide.",
@@ -154,7 +156,7 @@ const mapContractError = (err: any) => {
     quality?: string,
   ) => {
     if (!pieceValue || !goldPrice || !quality) return null;
-    const bps = qualityBpsMap[quality] ?? null;
+    const bps = QUALITY_BPS_MAP[quality] ?? null;
     if (!bps) return null;
     try {
       const pv = BigInt(pieceValue);
@@ -178,7 +180,7 @@ const mapContractError = (err: any) => {
 
   // Check admin
   const { data: isAdminData } = useReadContract({
-    abi: CONTRACT_ABI as any,
+    abi: CONTRACT_ABI as Abi,
     address: CONTRACT_ADDRESS as `0x${string}`,
     functionName: "isAdmin",
     args: connectedAddress ? [connectedAddress as `0x${string}`] : undefined,
@@ -208,7 +210,7 @@ const mapContractError = (err: any) => {
   });
 
   // Load customers list for admin view
-  const fetchCustomers = async () => {
+  const fetchCustomers = useCallback(async () => {
     if (!isAdmin) return;
     setListLoading(true);
     setListError(null);
@@ -219,13 +221,17 @@ const mapContractError = (err: any) => {
         throw new Error(data?.error || "Impossible de charger les clients.");
       }
       setCustomers(data.rows as CustomerRow[]);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      setListError(err.message);
+      const message =
+        err instanceof Error
+          ? err.message
+          : "Impossible de charger les clients.";
+      setListError(message);
     } finally {
       setListLoading(false);
     }
-  };
+  }, [isAdmin]);
 
   // Load totalPieceValue on-chain for each customer (lire directement le contrat)
   useEffect(() => {
@@ -294,14 +300,14 @@ const mapContractError = (err: any) => {
       const t = setTimeout(() => setSuccess(null), SUCCESS_TIMEOUT_MS);
       return () => clearTimeout(t);
     }
-  }, [isConfirmed, receipt]);
+  }, [fetchCustomers, isConfirmed, receipt]);
 
   // Track tx errors / reverted status
   useEffect(() => {
     if (txError) {
       setError(mapContractError(txError));
       setSuccess(null);
-    } else if (receipt && (receipt as any).status === "reverted") {
+    } else if (receipt && receipt.status === "reverted") {
       setError("La transaction a échoué (reverted).");
       setSuccess(null);
     }
@@ -332,12 +338,12 @@ const mapContractError = (err: any) => {
               topics: [...(log.topics || [])] as [`0x${string}`, ...`0x${string}`[]],
             });
             if (decoded.eventName === "GoldTokenMinted") {
-              const args: any = decoded.args;
-              const pieceValue = BigInt(args.pieceValue ?? 0);
-              const amount = BigInt(args.amount ?? 1);
+              const args = decoded.args as Record<string, unknown>;
+              const pieceValue = BigInt((args.pieceValue as bigint | number | string | undefined) ?? 0);
+              const amount = BigInt((args.amount as bigint | number | string | undefined) ?? 1);
               mintedPieceValues.push(pieceValue * amount); // amount=1 en pratique
               if (decodedGoldPrice === null && args.goldPrice !== undefined) {
-                decodedGoldPrice = BigInt(args.goldPrice);
+                decodedGoldPrice = BigInt(args.goldPrice as bigint | number | string);
               }
             }
           } catch {
@@ -363,7 +369,7 @@ const mapContractError = (err: any) => {
           for (const n of pendingNapoleons) {
             const qty = BigInt(Number(n.quantity) || 0);
             const wMg = BigInt(Math.round((n.weight || 0) * 1000));
-            const bps = BigInt(qualityBpsMap[n.quality] ?? qualityBpsMap["TB"]);
+            const bps = BigInt(QUALITY_BPS_MAP[n.quality] ?? QUALITY_BPS_MAP["TB"]);
             const pieceVal = (decodedGoldPrice * wMg * bps) / (10000n * BigInt(MG_PER_OUNCE));
             perLotRaw.push(pieceVal * qty);
           }
@@ -407,11 +413,11 @@ const mapContractError = (err: any) => {
       }
     };
     pushInitialPrice();
-  }, [isConfirmed, receipt, lastWalletForTokens, pendingNapoleons, napoleons, fetchCustomers, GOLD_TOKEN_MINTED_EVENT]);
+  }, [fetchCustomers, isConfirmed, lastWalletForTokens, napoleons, pendingNapoleons, receipt]);
 
   useEffect(() => {
     fetchCustomers();
-  }, [isAdmin, activeTab]);
+  }, [isAdmin, activeTab, fetchCustomers]);
 
   // Handle input changes
   const handleChange = (field: keyof CustomerForm, value: string) => {
@@ -495,8 +501,9 @@ const mapContractError = (err: any) => {
         amount: attrMap["Amount"],
         uri: meta.external_url || undefined,
       });
-    } catch (err: any) {
-      setSearchError(err.message || "Erreur lors de la recherche.");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Erreur lors de la recherche.";
+      setSearchError(msg);
     } finally {
       setSearchLoading(false);
     }
@@ -667,7 +674,7 @@ const mapContractError = (err: any) => {
           qualitiesArr,
         ],
       });
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
       const friendly = mapContractError(err);
       // Cas fréquent : client déjà enregistré / require côté contrat
@@ -689,7 +696,7 @@ const mapContractError = (err: any) => {
   if (!isAdmin) {
     return (
       <div className="text-center text-red-600 font-semibold mt-12">
-        Accès réservé à l'administrateur PatriDeFi.
+        Accès réservé à l&apos;administrateur PatriDeFi.
       </div>
     );
   }
@@ -735,10 +742,10 @@ const mapContractError = (err: any) => {
         <>
           <div className="space-y-2">
             <h2 className="text-lg font-semibold">
-              Ajout des informations client et tokenisation des Napoléons d'or
+              Ajout des informations client et tokenisation des Napoléons d&apos;or
             </h2>
             <p className="text-sm text-muted-foreground">
-              Renseignez les informations sur le client et ses Napoléons d’or, puis déclenchez la tokenisation.
+              Renseignez les informations sur le client et ses Napoléons d&apos;or, puis déclenchez la tokenisation.
             </p>
             {connectedAddress && (
               <p className="text-xs text-muted-foreground">
@@ -1048,10 +1055,13 @@ const mapContractError = (err: any) => {
           {searchResult ? (
             <div className="rounded-lg border border-neutral-800 bg-neutral-900/70 p-3 flex flex-col gap-3 md:flex-row md:items-start">
               {searchResult.image && (
-                <img
+                <Image
                   src={searchResult.image}
                   alt={searchResult.name || "Token image"}
+                  width={128}
+                  height={128}
                   className="h-32 w-32 rounded-md object-cover border"
+                  unoptimized
                 />
               )}
               <div className="space-y-1 text-sm">
@@ -1110,4 +1120,3 @@ const mapContractError = (err: any) => {
     </div>
   );
 };
-/* eslint-disable @typescript-eslint/no-explicit-any, react-hooks/exhaustive-deps, react/no-unescaped-entities, @next/next/no-img-element */

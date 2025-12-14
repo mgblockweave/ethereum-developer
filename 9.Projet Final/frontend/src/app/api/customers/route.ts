@@ -78,8 +78,6 @@ export async function POST(req: NextRequest) {
     quality: n.quality ?? "",
   }));
 
-  const { walletAddress: _omitWallet, ...customerWithoutWallet } = customer;
-
   // Vérifie s'il existe déjà une fiche pour ce wallet
   const { data: existing, error: fetchError } = await supabaseServer
     .from("customers")
@@ -166,4 +164,3 @@ export async function GET() {
 
   return NextResponse.json({ rows: data as SupabaseRow[] });
 }
-/* eslint-disable @typescript-eslint/no-unused-vars */

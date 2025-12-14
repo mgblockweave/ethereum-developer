@@ -1,5 +1,4 @@
 import { ConnectButton } from "@rainbow-me/rainbowkit";
-import Layout from "@/components/shared/Layout";
 import Image from "next/image";
 
 const Header = () => {
@@ -24,4 +23,3 @@ const Header = () => {
 }
 
 export default  Header;
-/* eslint-disable @typescript-eslint/no-unused-vars */

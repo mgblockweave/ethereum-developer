@@ -109,10 +109,10 @@ const PatriDefiCustomer = () => {
           throw new Error(data?.error || "Impossible de récupérer vos données.");
         }
         setRow(data.row as CustomerRow);
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error(err);
         setRow(null);
-        setError(err.message);
+        setError(err instanceof Error ? err.message : "Erreur inattendue.");
       } finally {
         setLoading(false);
       }
@@ -131,7 +131,7 @@ const PatriDefiCustomer = () => {
   if (unauthorized) {
     return (
       <div className="rounded-xl border bg-muted/30 p-4 text-sm text-red-600">
-        Ce wallet n'est pas enregistré comme client PatriDeFi. Contactez l'administrateur.
+        Ce wallet n&apos;est pas enregistré comme client PatriDeFi. Contactez l&apos;administrateur.
       </div>
     );
   }
@@ -291,4 +291,3 @@ const PatriDefiCustomer = () => {
 };
 
 export default PatriDefiCustomer;
-/* eslint-disable @typescript-eslint/no-explicit-any, react/no-unescaped-entities */
