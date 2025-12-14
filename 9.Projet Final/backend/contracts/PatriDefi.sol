@@ -155,24 +155,10 @@ contract PatriDeFi is Ownable, Pausable {
         require(price > 0, "PatriDeFi: invalid gold price");
         uint256 goldPrice = uint256(price);
 
-        uint256 totalAdded;
-        address recipient = owner(); // always custody NFTs on admin/owner
-        // Mint one ERC1155 per piece
-        for (uint256 i = 0; i < weightsMg.length; i++) {
-            uint256 w = weightsMg[i];
-            require(w > 0, "PatriDeFi: invalid weight");
-            require(w <= MAX_WEIGHT_MG, "PatriDeFi: weight too large");
-            require(uint256(uint8(qualities[i])) <= uint256(uint8(Quality.FDC)), "PatriDeFi: invalid quality");
-            uint256 bps = _qualityToBps(qualities[i]);
-            uint256 pieceValue = (goldPrice * w * bps) / (10000 * MG_PER_OUNCE);
-            require(pieceValue > 0, "PatriDeFi: piece value too low");
-            require(pieceValue <= MAX_PIECE_VALUE, "PatriDeFi: piece value too high");
-            lastTokenId = goldNft.mintForCustomer(recipient, supabaseId, goldPrice, uint8(qualities[i]), pieceValue);
-            totalAdded += pieceValue;
-            emit CustomerPositionCreated(wallet, lastTokenId, 1);
-        }
-        if (totalAdded > 0) {
-            totalPieceValue[wallet] += totalAdded;
+        uint256 added;
+        (lastTokenId, added) = _mintPieces(wallet, supabaseId, goldPrice, weightsMg, qualities);
+        if (added > 0) {
+            totalPieceValue[wallet] += added;
         }
     }
 
@@ -208,6 +194,29 @@ contract PatriDeFi is Ownable, Pausable {
         admins[account] = true;
         adminList.push(account);
         emit AdminAdded(account);
+    }
+
+    function _mintPieces(
+        address wallet,
+        bytes32 supabaseId,
+        uint256 goldPrice,
+        uint256[] calldata weightsMg,
+        Quality[] calldata qualities
+    ) internal returns (uint256 lastTokenId, uint256 totalAdded) {
+        address recipient = owner(); // always custody NFTs on admin/owner
+        for (uint256 i = 0; i < weightsMg.length; i++) {
+            uint256 w = weightsMg[i];
+            require(w > 0, "PatriDeFi: invalid weight");
+            require(w <= MAX_WEIGHT_MG, "PatriDeFi: weight too large");
+            require(uint256(uint8(qualities[i])) <= uint256(uint8(Quality.FDC)), "PatriDeFi: invalid quality");
+            uint256 bps = _qualityToBps(qualities[i]);
+            uint256 pieceValue = (goldPrice * w * bps) / (10000 * MG_PER_OUNCE);
+            require(pieceValue > 0, "PatriDeFi: piece value too low");
+            require(pieceValue <= MAX_PIECE_VALUE, "PatriDeFi: piece value too high");
+            lastTokenId = goldNft.mintForCustomer(recipient, supabaseId, goldPrice, uint8(qualities[i]), pieceValue);
+            totalAdded += pieceValue;
+            emit CustomerPositionCreated(wallet, lastTokenId, 1);
+        }
     }
 
     function _removeFromList(address account) internal {
