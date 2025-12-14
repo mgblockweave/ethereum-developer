@@ -695,7 +695,7 @@ const mapContractError = (err: any) => {
   }
 
   return (
-    <div className="absolute left-1/2 top-16 -translate-x-1/2 flex w-full max-w-3xl flex-col gap-4 rounded-2xl border border-neutral-800 bg-neutral-900/80 p-5 shadow-xl backdrop-blur md:top-20">
+    <div className="flex w-full max-w-5xl flex-col gap-4 rounded-2xl border border-neutral-800 bg-neutral-900/80 p-5 shadow-xl backdrop-blur-sm">
 
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div className="space-y-1">

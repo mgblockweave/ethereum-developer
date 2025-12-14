@@ -6,10 +6,22 @@ import { useAccount } from "wagmi";
 export default function Home() {
   const { isConnected } = useAccount();
 
+  if (isConnected) {
+    return (
+      <div className="min-h-screen text-white">
+        <main className="mx-auto flex justify-center px-4 py-10 lg:px-10">
+          <div className="w-full max-w-5xl rounded-3xl border border-white/10 bg-black/70 p-6 shadow-2xl backdrop-blur-sm">
+            <PatriDefiHome />
+          </div>
+        </main>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-gradient-to-b from-neutral-950 via-neutral-900 to-black text-white">
-      <main className="mx-auto flex max-w-6xl flex-col gap-10 px-6 py-12 font-sans lg:px-10">
-        <section className="rounded-3xl border border-white/10 bg-white/5 p-8 shadow-2xl backdrop-blur">
+    <div className="min-h-screen text-white">
+      <main className="mx-auto flex max-w-6xl flex-col gap-8 px-4 py-10 font-sans lg:px-10">
+        <section className="rounded-3xl border border-white/10 bg-black/70 p-8 shadow-2xl backdrop-blur-sm">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
             <div className="space-y-4">
               <div className="inline-flex items-center gap-2 rounded-full bg-emerald-900/40 px-4 py-2 text-sm font-medium text-emerald-200">
@@ -38,8 +50,10 @@ export default function Home() {
           </div>
         </section>
 
-        <section className="rounded-3xl border border-white/10 bg-white/5 p-6 shadow-xl backdrop-blur">
-          {isConnected ? <PatriDefiHome /> : <NotConnected />}
+        <section className="rounded-3xl border border-white/10 bg-black/70 p-6 shadow-xl backdrop-blur-sm">
+          <div className="mx-auto max-w-3xl">
+            <NotConnected />
+          </div>
         </section>
       </main>
     </div>

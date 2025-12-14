@@ -19,18 +19,13 @@ export default function PatriDefiHome() {
   const isAdmin = Boolean(isConnected && address && (isAdminData as boolean));
 
   return (
-    <div className="flex items-start justify-center bg-zinc-50 font-sans dark:bg-black">
+    <div className="w-full font-sans">
       {!isConnected && (
         <div className="mb-8 text-center text-sm text-muted-foreground">
           Veuillez connecter votre wallet pour continuer.
         </div>
       )}
-
-      {isAdmin ? (
-        <PatriDefiAdmin />
-      ) : (
-        <PatriDefiCustomer />
-      )}
+      {isAdmin ? <PatriDefiAdmin /> : <PatriDefiCustomer />}
     </div>
   );
 }
