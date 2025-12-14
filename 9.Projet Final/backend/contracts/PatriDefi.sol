@@ -5,6 +5,12 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
 import "./NftPatriD.sol";
 
+interface IERC3643 {
+    function decimals() external view returns (uint8);
+    function mint(address to, uint256 amount) external;
+    function addToWhitelist(address account) external;
+}
+
 interface AggregatorV3Interface {
     function latestRoundData()
         external
@@ -42,9 +48,10 @@ contract PatriDeFi is Ownable, Pausable {
     mapping(address => uint256) public totalPieceValue; // total pieceValue (1e8 scale) minted for a wallet
 
     NftPatriD public goldNft;
+    IERC3643 public patriGold;
     AggregatorV3Interface public priceFeed;
 
-    uint256 private constant MG_PER_OUNCE = 31_103; // ~31.103 g en milligrammes
+    uint256 private constant MG_PER_OUNCE = 31_103; // ~31.103 g in milligrams
     uint256 private constant MAX_BATCH = 100;
     uint256 private constant MAX_WEIGHT_MG = 1_000_000; // 1000 g
     uint256 private constant MAX_PIECE_VALUE = 1e24;   // generous upper bound
@@ -77,11 +84,14 @@ contract PatriDeFi is Ownable, Pausable {
 
     /// @param patriDAddress Deployed NftPatriD (ERC1155) contract address
     /// @param priceFeedAddress Chainlink price feed for gold (per ounce)
-    constructor(address patriDAddress, address priceFeedAddress) Ownable(msg.sender) {
+    /// @param patriGoldAddress Deployed PatriGold (ERC3643) token address
+    constructor(address patriDAddress, address priceFeedAddress, address patriGoldAddress) Ownable(msg.sender) {
         require(patriDAddress != address(0), "PatriDeFi: zero address");
         require(priceFeedAddress != address(0), "PatriDeFi: zero feed");
+        require(patriGoldAddress != address(0), "PatriDeFi: zero PatriGold");
         goldNft = NftPatriD(patriDAddress);
         priceFeed = AggregatorV3Interface(priceFeedAddress);
+        patriGold = IERC3643(patriGoldAddress);
         _addAdmin(msg.sender);
     }
 
@@ -115,13 +125,13 @@ contract PatriDeFi is Ownable, Pausable {
     ///        1. Save customer + Napoleons details into Supabase
     ///        2. Compute dataHash = keccak256(JSON(payload))
     ///        3. Compute supabaseId = keccak256(bytes(UUID)) or cast to bytes32
-    ///        4. Call this function with wallet, supabaseId, dataHash and détails des pièces
+    ///        4. Call this function with wallet, supabaseId, dataHash and piece details
     /// @param wallet Customer on-chain wallet (will receive the NFTs)
     /// @param supabaseId Supabase customer identifier, as bytes32
     /// @param dataHash Hash of the off-chain payload stored in Supabase
-    /// @param weightsMg Poids de chaque pièce en milligrammes
-    /// @param qualities Qualité de chaque pièce (enum Quality)
-    /// @return lastTokenId Dernier token minté
+    /// @param weightsMg Weight of each piece in milligrams
+    /// @param qualities Quality of each piece (enum Quality)
+    /// @return lastTokenId Last token minted
     function registerCustomerAndMintDetailed(
         address wallet,
         bytes32 supabaseId,
@@ -159,6 +169,7 @@ contract PatriDeFi is Ownable, Pausable {
         (lastTokenId, added) = _mintPieces(wallet, supabaseId, goldPrice, weightsMg, qualities);
         if (added > 0) {
             totalPieceValue[wallet] += added;
+            _mintPatriGold(wallet, added, 8); // gold price feed is 8 decimals
         }
     }
 
@@ -217,6 +228,14 @@ contract PatriDeFi is Ownable, Pausable {
             totalAdded += pieceValue;
             emit CustomerPositionCreated(wallet, lastTokenId, 1);
         }
+    }
+
+    function _mintPatriGold(address to, uint256 pieceValueUsd, uint8 priceDecimals) internal {
+        uint8 pgDec = patriGold.decimals();
+        uint256 amount = (pieceValueUsd * (10 ** pgDec)) / (10 ** priceDecimals);
+        if (amount == 0) return;
+        patriGold.addToWhitelist(to); // authorise the client to hold PatriGold
+        patriGold.mint(to, amount);
     }
 
     function _removeFromList(address account) internal {
